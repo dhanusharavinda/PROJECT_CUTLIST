@@ -13,6 +13,7 @@ import {
   Upload,
 } from "lucide-react";
 import { Button, Empty, Labeled, Modal, Spinner, useToast } from "@/components/ui";
+import { FilmstripArt } from "@/components/EmptyArt";
 import { bytes, timecode } from "@/lib/format";
 import type { Video } from "@/lib/types";
 import { api } from "./useProject";
@@ -172,7 +173,7 @@ export function FootagePanel({
       {videos.length === 0 ? (
         <div className="glass rounded-[15px]">
           <Empty
-            icon={<Clapperboard size={18} />}
+            art={<FilmstripArt />}
             title="No footage attached"
             hint={
               canUpload

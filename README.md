@@ -224,17 +224,23 @@ Shortcuts are ignored while you're typing in a field.
 src/
   app/
     page.tsx                     landing
+    error.tsx / not-found.tsx    app-wide failure + 404 screens
+    global-error.tsx             last resort, no stylesheet assumed
     (auth)/                      sign in / sign up
     join/[token]/                invite acceptance
     app/                         the product (sidebar shell)
       page.tsx                     dashboard
+      loading.tsx                  skeleton shaped like the dashboard
+      error.tsx / not-found.tsx    failures that keep the sidebar
       settings/                    AI keys, Drive, people
       projects/[id]/               brief · footage · cut list · review + room
       projects/[id]/walkthrough/[v]/ reference player · markers · recorder · notes
     api/                         route handlers
   components/
     ui.tsx                       design-system primitives
-    AppShell.tsx                 sidebar, workspace switcher
+    AppShell.tsx                 sidebar, workspace switcher, skip link
+    Fallback.tsx                 shared shape for every dead end
+    EmptyArt.tsx                 line art for the empty states
     project/                     brief, footage, cut list, review, room
     walkthrough/                 marker track, recorder, notes panel
   lib/
@@ -258,6 +264,12 @@ src/
 - **Auth** is a signed, HTTP-only session cookie; passwords are scrypt.
 - **Media** lives on disk under `data/storage/<workspace>/…` and is served with
   HTTP range support so the player can seek.
+- **Accessibility**: every icon-only control carries an `aria-label`, the type
+  ramp meets WCAG AA on the app background, focus is always visible, dialogs
+  trap Tab and restore focus on close, and a skip link opens the tab order.
+- **No dead ends**: 404s, thrown errors, an expired session, a lost workspace
+  membership and a dropped realtime connection each get a named screen or
+  banner with a way out. No raw stack trace reaches the browser.
 
 ### How client isolation works
 

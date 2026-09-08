@@ -1,8 +1,10 @@
 import { redirect } from "next/navigation";
 import { currentUser } from "@/lib/auth";
-import { requireCtx } from "@/lib/tenancy";
+import { HttpError, requireCtx, type Ctx } from "@/lib/tenancy";
 import { many } from "@/lib/db";
 import { AppShell } from "@/components/AppShell";
+import { FallbackLink, FullPageState } from "@/components/Fallback";
+import { SignOutLink } from "@/components/SignOutLink";
 
 export const dynamic = "force-dynamic";
 
@@ -13,7 +15,31 @@ export default async function AppLayout({
 }) {
   if (!(await currentUser())) redirect("/login");
 
-  const ctx = await requireCtx();
+  let ctx: Ctx;
+  try {
+    ctx = await requireCtx();
+  } catch (err) {
+    // Reachable in one real case: you were removed from the only workspace you
+    // belonged to while signed in. Without this it renders a raw 403.
+    if (err instanceof HttpError && err.status === 403) {
+      return (
+        <FullPageState
+          eyebrow="No workspace"
+          title="You’re not in a workspace"
+          body="Your membership was removed, or the workspace was deleted. Ask whoever runs it for a fresh invite link, or start one of your own."
+          actions={
+            <>
+              <FallbackLink href="/signup" primary>
+                Create a workspace
+              </FallbackLink>
+              <SignOutLink />
+            </>
+          }
+        />
+      );
+    }
+    throw err;
+  }
 
   const projects = many<{
     id: string;

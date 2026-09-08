@@ -46,6 +46,10 @@ export function AppShell({
 
   return (
     <div className="min-h-dvh lg:grid lg:grid-cols-[254px_1fr]">
+      <a href="#content" className="skip-to-content">
+        Skip to content
+      </a>
+
       {/* Mobile bar */}
       <div className="lg:hidden sticky top-0 z-40 glass-deep h-14 flex items-center justify-between px-4">
         <button
@@ -95,7 +99,9 @@ export function AppShell({
         />
       </aside>
 
-      <div className="min-w-0">{children}</div>
+      <main id="content" className="min-w-0">
+        {children}
+      </main>
     </div>
   );
 }
@@ -281,6 +287,7 @@ function SidebarBody({
           <button
             onClick={signOut}
             title="Sign out"
+              aria-label="Sign out"
             className="size-7 grid place-items-center rounded-lg text-faint hover:text-danger hover:bg-danger/10 transition-colors shrink-0"
           >
             <LogOut size={14} />

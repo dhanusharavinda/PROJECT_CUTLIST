@@ -41,7 +41,7 @@ export function Walkthrough({
 }) {
   const router = useRouter();
   const toast = useToast();
-  const { project: state, presence, live, refresh } = useProject(initial);
+  const { project: state, presence, connection, refresh } = useProject(initial);
 
   const video = useMemo(
     () => state.videos.find((v) => v.id === videoId) ?? null,
@@ -286,6 +286,38 @@ export function Walkthrough({
           ref={shell}
           className="min-w-0 flex flex-col gap-3 p-4 overflow-y-auto bg-ink-950/30"
         >
+          {/* Below lg the clip rail is hidden, so clips need another way in.
+              Only worth showing when there is actually a choice to make. */}
+          {state.videos.length > 1 ? (
+            <nav
+              aria-label="Clips"
+              className="lg:hidden -mx-1 px-1 flex gap-1.5 overflow-x-auto no-scrollbar shrink-0"
+            >
+              {state.videos.map((clip) => (
+                <Link
+                  key={clip.id}
+                  href={`/app/projects/${state.project.id}/walkthrough/${clip.id}`}
+                  aria-current={clip.id === videoId ? "page" : undefined}
+                  className={clsx(
+                    "shrink-0 rounded-[10px] px-3 py-2 text-[12.5px] whitespace-nowrap transition-colors border",
+                    clip.id === videoId
+                      ? "bg-white/[0.08] text-chalk border-white/12"
+                      : "text-mute border-white/[0.07] hover:text-chalk-dim hover:bg-white/[0.04]",
+                  )}
+                >
+                  <span className="max-w-[16ch] truncate inline-block align-bottom">
+                    {clip.title}
+                  </span>
+                  {clip.duration_ms ? (
+                    <span className="tabular text-[10.5px] text-faint ml-2">
+                      {timecode(clip.duration_ms)}
+                    </span>
+                  ) : null}
+                </Link>
+              ))}
+            </nav>
+          ) : null}
+
           <div className="relative rounded-[13px] overflow-hidden bg-black border border-white/[0.07] shrink-0">
             <video
               ref={player}
@@ -309,12 +341,14 @@ export function Walkthrough({
             />
           </div>
 
-          {/* Transport */}
-          <div className="glass rounded-[13px] px-3 py-2.5 flex items-center gap-2 shrink-0">
+          {/* Transport — wraps to two rows under ~560px so the scrubber keeps a
+              usable width instead of squeezing the controls off screen. */}
+          <div className="glass rounded-[13px] px-3 py-2.5 flex flex-wrap items-center gap-2 shrink-0">
             <button
               onClick={() => seek(currentMs - 10_000)}
               className="size-8 grid place-items-center rounded-lg text-mute hover:text-chalk hover:bg-white/[0.07] transition-colors"
               title="Back 10s (J)"
+              aria-label="Back 10s (J)"
             >
               <Rewind size={15} />
             </button>
@@ -322,6 +356,7 @@ export function Walkthrough({
               onClick={toggle}
               className="size-10 grid place-items-center rounded-full bg-white/[0.09] text-chalk hover:bg-white/[0.14] transition-colors"
               title="Play / pause (Space)"
+              aria-label="Play / pause (Space)"
             >
               {playing ? (
                 <Pause size={16} fill="currentColor" />
@@ -333,6 +368,7 @@ export function Walkthrough({
               onClick={() => seek(currentMs + 10_000)}
               className="size-8 grid place-items-center rounded-lg text-mute hover:text-chalk hover:bg-white/[0.07] transition-colors"
               title="Forward 10s (L)"
+              aria-label="Forward 10s (L)"
             >
               <FastForward size={15} />
             </button>
@@ -347,7 +383,7 @@ export function Walkthrough({
 
             <input
               type="range"
-              className="scrub flex-1 mx-2 min-w-[60px]"
+              className="scrub order-last w-full basis-full mt-1 sm:order-none sm:w-auto sm:basis-auto sm:flex-1 sm:mt-0 sm:mx-2 min-w-[60px]"
               min={0}
               max={Math.max(1, durationMs)}
               value={Math.min(currentMs, durationMs)}
@@ -355,44 +391,51 @@ export function Walkthrough({
               aria-label="Seek"
             />
 
-            <div className="flex items-center gap-1 shrink-0">
-              <Gauge size={13} className="text-faint" />
-              <select
-                value={speed}
-                onChange={(e) => {
-                  const next = Number(e.target.value);
-                  setSpeed(next);
-                  if (player.current) player.current.playbackRate = next;
-                }}
-                className="bg-transparent text-[11.5px] tabular text-mute hover:text-chalk cursor-pointer appearance-none outline-none"
-              >
-                {SPEEDS.map((rate) => (
-                  <option key={rate} value={rate}>
-                    {rate}×
-                  </option>
-                ))}
-              </select>
-            </div>
+            {/* One group so speed, mute and fullscreen never split across rows. */}
+            <div className="flex items-center gap-1 shrink-0 ml-auto">
+              <label className="flex items-center gap-1 cursor-pointer">
+                <Gauge size={13} className="text-faint" aria-hidden />
+                <span className="sr-only">Playback speed</span>
+                <select
+                  value={speed}
+                  onChange={(e) => {
+                    const next = Number(e.target.value);
+                    setSpeed(next);
+                    if (player.current) player.current.playbackRate = next;
+                  }}
+                  className="bg-transparent text-[11.5px] tabular text-mute hover:text-chalk cursor-pointer appearance-none outline-none"
+                >
+                  {SPEEDS.map((rate) => (
+                    <option key={rate} value={rate}>
+                      {rate}×
+                    </option>
+                  ))}
+                </select>
+              </label>
 
-            <button
-              onClick={() => {
-                const el = player.current;
-                if (!el) return;
-                el.muted = !el.muted;
-                setMuted(el.muted);
-              }}
-              className="size-8 grid place-items-center rounded-lg text-mute hover:text-chalk hover:bg-white/[0.07] transition-colors shrink-0"
-              title="Mute (M)"
-            >
-              {muted ? <VolumeX size={15} /> : <Volume2 size={15} />}
-            </button>
-            <button
-              onClick={() => void shell.current?.requestFullscreen?.().catch(() => {})}
-              className="size-8 grid place-items-center rounded-lg text-mute hover:text-chalk hover:bg-white/[0.07] transition-colors shrink-0"
-              title="Fullscreen (F)"
-            >
-              <Maximize2 size={14} />
-            </button>
+              <button
+                onClick={() => {
+                  const el = player.current;
+                  if (!el) return;
+                  el.muted = !el.muted;
+                  setMuted(el.muted);
+                }}
+                className="size-8 grid place-items-center rounded-lg text-mute hover:text-chalk hover:bg-white/[0.07] transition-colors"
+                title="Mute (M)"
+                aria-label={muted ? "Unmute (M)" : "Mute (M)"}
+                aria-pressed={muted}
+              >
+                {muted ? <VolumeX size={15} /> : <Volume2 size={15} />}
+              </button>
+              <button
+                onClick={() => void shell.current?.requestFullscreen?.().catch(() => {})}
+                className="size-8 grid place-items-center rounded-lg text-mute hover:text-chalk hover:bg-white/[0.07] transition-colors"
+                title="Fullscreen (F)"
+                aria-label="Fullscreen (F)"
+              >
+                <Maximize2 size={14} />
+              </button>
+            </div>
           </div>
 
           <div className="shrink-0">
@@ -499,7 +542,7 @@ export function Walkthrough({
               projectId={state.project.id}
               messages={state.messages}
               presence={presence}
-              live={live}
+              connection={connection}
               canChat={state.capabilities.canChat}
               meId={state.me.id}
               labelTitles={labelTitles}

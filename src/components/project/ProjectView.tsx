@@ -5,7 +5,6 @@ import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 import clsx from "clsx";
 import {
-  ArrowUpRight,
   ClipboardList,
   Download,
   Film,
@@ -30,7 +29,7 @@ type Tab = "brief" | "footage" | "cutlist" | "review";
 export function ProjectView({ initial }: { initial: ProjectDetail }) {
   const router = useRouter();
   const toast = useToast();
-  const { project: state, presence, live, refresh } = useProject(initial);
+  const { project: state, presence, connection, refresh } = useProject(initial);
   const [tab, setTab] = useState<Tab>(
     initial.videos.length === 0
       ? "brief"
@@ -178,6 +177,7 @@ export function ProjectView({ initial }: { initial: ProjectDetail }) {
                 <button
                   onClick={remove}
                   title="Delete project"
+              aria-label="Delete project"
                   className="size-9.5 grid place-items-center rounded-[10px] text-faint hover:text-danger hover:bg-danger/10 transition-colors"
                 >
                   <Trash2 size={15} />
@@ -276,7 +276,7 @@ export function ProjectView({ initial }: { initial: ProjectDetail }) {
           projectId={project.id}
           messages={state.messages}
           presence={presence}
-          live={live}
+          connection={connection}
           canChat={capabilities.canChat}
           meId={state.me.id}
           labelTitles={labelTitles}

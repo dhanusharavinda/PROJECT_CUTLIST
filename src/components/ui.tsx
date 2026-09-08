@@ -183,15 +183,21 @@ export function Avatar({
   seed,
   size = 28,
   className,
+  decorative,
 }: {
   name: string;
   seed?: string;
   size?: number;
   className?: string;
+  /** Set when the name is already written next to it, to avoid a double read. */
+  decorative?: boolean;
 }) {
   const hue = hueFor(seed || name);
   return (
     <span
+      {...(decorative
+        ? { "aria-hidden": true }
+        : { role: "img", "aria-label": name })}
       className={clsx(
         "inline-flex items-center justify-center rounded-full font-semibold shrink-0 select-none",
         className,
@@ -227,8 +233,9 @@ export function Segmented<T extends string>({
   return (
     <div
       className={clsx(
-        "inline-flex items-center gap-0.5 rounded-[11px] p-0.5 glass-soft",
-        "max-w-full overflow-x-auto no-scrollbar",
+        // Wraps rather than scrolls: a hidden horizontal scroll on a narrow
+        // screen means a tab nobody discovers.
+        "inline-flex flex-wrap items-center gap-0.5 rounded-[11px] p-0.5 glass-soft max-w-full",
         className,
       )}
     >
@@ -236,6 +243,7 @@ export function Segmented<T extends string>({
         <button
           key={option.value}
           onClick={() => onChange(option.value)}
+          aria-pressed={value === option.value}
           className={clsx(
             "relative rounded-[9px] px-3 h-7.5 text-[12.5px] font-medium transition-all duration-150",
             "flex items-center gap-1.5 whitespace-nowrap shrink-0",
@@ -281,19 +289,57 @@ export function Modal({
   width?: number;
 }) {
   const [mounted, setMounted] = useState(false);
+  const panel = useRef<HTMLDivElement>(null);
   useEffect(() => setMounted(true), []);
 
   useEffect(() => {
     if (!open) return;
+
+    // Send focus into the dialog, and put it back where it came from on close —
+    // otherwise a keyboard user is dropped at the top of the document.
+    const returnTo = document.activeElement as HTMLElement | null;
+    const focusable = () =>
+      Array.from(
+        panel.current?.querySelectorAll<HTMLElement>(
+          'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+        ) ?? [],
+        // getClientRects rather than offsetParent: the latter is always null
+        // for position:fixed, which would silently drop those from the trap.
+      ).filter((el) => el.getClientRects().length > 0);
+
+    // Prefer what the form asked for, then the first real field, and only fall
+    // back to "whatever is first" — which would otherwise be the close button.
+    const items = focusable();
+    const target =
+      items.find((el) => el.hasAttribute("autofocus")) ??
+      items.find((el) => ["INPUT", "TEXTAREA", "SELECT"].includes(el.tagName)) ??
+      items[0];
+    (target ?? panel.current)?.focus();
+
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
+      if (e.key === "Escape") return onClose();
+      if (e.key !== "Tab") return;
+      // Keep Tab inside the dialog while it is modal.
+      const items = focusable();
+      if (items.length === 0) return;
+      const firstItem = items[0];
+      const lastItem = items[items.length - 1];
+      if (e.shiftKey && document.activeElement === firstItem) {
+        e.preventDefault();
+        lastItem.focus();
+      } else if (!e.shiftKey && document.activeElement === lastItem) {
+        e.preventDefault();
+        firstItem.focus();
+      }
     };
+
     document.addEventListener("keydown", onKey);
     const prev = document.body.style.overflow;
     document.body.style.overflow = "hidden";
     return () => {
       document.removeEventListener("keydown", onKey);
       document.body.style.overflow = prev;
+      returnTo?.focus?.();
     };
   }, [open, onClose]);
 
@@ -306,11 +352,13 @@ export function Modal({
         onClick={onClose}
       />
       <div
+        ref={panel}
         role="dialog"
         aria-modal="true"
         aria-label={title}
+        tabIndex={-1}
         style={{ width: "100%", maxWidth: width }}
-        className="relative glass-deep rounded-[18px] animate-rise max-h-[88dvh] flex flex-col"
+        className="relative glass-deep rounded-[18px] animate-rise max-h-[88dvh] flex flex-col outline-none"
       >
         <div className="flex items-start justify-between gap-4 px-6 pt-5 pb-4">
           <div>
@@ -393,12 +441,15 @@ export function ToastHost({ children }: { children: ReactNode }) {
 
 export function Empty({
   icon,
+  art,
   title,
   hint,
   action,
   className,
 }: {
   icon?: ReactNode;
+  /** Line art, for the empty states worth illustrating. Wins over `icon`. */
+  art?: ReactNode;
   title: string;
   hint?: string;
   action?: ReactNode;
@@ -407,22 +458,25 @@ export function Empty({
   return (
     <div
       className={clsx(
-        "flex flex-col items-center justify-center text-center px-6 py-12",
+        "flex flex-col items-center justify-center text-center px-6",
+        art ? "py-14" : "py-12",
         className,
       )}
     >
-      {icon ? (
+      {art ? (
+        <div className="mb-6 opacity-90">{art}</div>
+      ) : icon ? (
         <div className="mb-3.5 size-11 grid place-items-center rounded-[13px] glass-soft text-faint">
           {icon}
         </div>
       ) : null}
       <p className="text-[14px] text-chalk-dim font-medium">{title}</p>
       {hint ? (
-        <p className="text-[12.5px] text-faint mt-1.5 max-w-[38ch] leading-relaxed">
+        <p className="text-[12.5px] text-mute mt-1.5 max-w-[40ch] leading-relaxed">
           {hint}
         </p>
       ) : null}
-      {action ? <div className="mt-4">{action}</div> : null}
+      {action ? <div className="mt-5">{action}</div> : null}
     </div>
   );
 }

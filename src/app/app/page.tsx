@@ -14,6 +14,7 @@ import { resolveStt } from "@/lib/ai/stt";
 import { resolveLlm } from "@/lib/ai/llm";
 import { NewProjectButton } from "@/components/NewProjectButton";
 import { Empty, Meter } from "@/components/ui";
+import { FilmstripArt } from "@/components/EmptyArt";
 import { PROJECT_STATUS_STYLE } from "@/lib/labelStyle";
 import { relativeTime, shortDate } from "@/lib/format";
 
@@ -155,7 +156,7 @@ export default async function Dashboard() {
           {projects.length === 0 ? (
             <div className="glass rounded-[16px]">
               <Empty
-                icon={<Clapperboard size={18} />}
+                art={<FilmstripArt />}
                 title="Nothing here yet"
                 hint="A project holds one video — or a batch of them — with its brief, footage, notes and cut list."
                 action={

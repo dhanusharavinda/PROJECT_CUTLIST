@@ -5,7 +5,6 @@ import clsx from "clsx";
 import {
   AlertCircle,
   Check,
-  Mic,
   Pencil,
   Play,
   RefreshCw,
@@ -14,6 +13,7 @@ import {
   X,
 } from "lucide-react";
 import { Avatar, Empty, Spinner, useToast } from "@/components/ui";
+import { MicArt } from "@/components/EmptyArt";
 import { relativeTime, timecode } from "@/lib/format";
 import { labelStyle } from "@/lib/labelStyle";
 import type { NoteWithTranscript } from "@/lib/queries";
@@ -38,7 +38,7 @@ export function NotesPanel({
   if (notes.length === 0) {
     return (
       <Empty
-        icon={<Mic size={17} />}
+        art={<MicArt />}
         title="No notes on this clip"
         hint="Park the playhead where you want to talk about, hit record, and say it the way you'd say it out loud."
       />
@@ -161,6 +161,7 @@ function NoteCard({
             <button
               onClick={playAudio}
               title="Play the original recording"
+              aria-label="Play the original recording"
               className="size-6 grid place-items-center rounded-md text-faint hover:text-chalk hover:bg-white/[0.07]"
             >
               {playing ? <Spinner /> : <Play size={11} fill="currentColor" />}
@@ -175,6 +176,7 @@ function NoteCard({
                 setEditing((v) => !v);
               }}
               title="Correct the transcript"
+              aria-label="Correct the transcript"
               className="size-6 grid place-items-center rounded-md text-faint hover:text-chalk hover:bg-white/[0.07]"
             >
               <Pencil size={11} />
@@ -184,6 +186,7 @@ function NoteCard({
             <button
               onClick={remove}
               title="Delete note"
+              aria-label="Delete note"
               className="size-6 grid place-items-center rounded-md text-faint hover:text-danger hover:bg-danger/10"
             >
               <Trash2 size={11} />
@@ -213,6 +216,7 @@ function NoteCard({
                 onClick={saveText}
                 disabled={busy}
                 title="Save and re-label"
+              aria-label="Save and re-label"
                 className="h-7 px-2.5 inline-flex items-center gap-1.5 rounded-lg bg-signal text-ink-950 text-[11.5px] font-medium disabled:opacity-50"
               >
                 {busy ? <Spinner /> : <Check size={12} />}
@@ -286,6 +290,7 @@ function NoteCard({
                   key={label.id}
                   onClick={() => onSeek(label.start_ms)}
                   title={label.title}
+              aria-label={label.title}
                   className={clsx(
                     "inline-flex items-center gap-1 rounded-full border px-1.5 py-px text-[10px] transition-colors",
                     label.status === "done" && "opacity-45",

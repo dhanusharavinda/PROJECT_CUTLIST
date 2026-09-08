@@ -6,13 +6,13 @@ import { Send, Sparkles } from "lucide-react";
 import { Avatar, Empty, Spinner, useToast } from "@/components/ui";
 import { relativeTime, timecode } from "@/lib/format";
 import type { MessageWithAuthor } from "@/lib/queries";
-import { api, type Presence } from "./useProject";
+import { api, type Connection, type Presence } from "./useProject";
 
 export function Room({
   projectId,
   messages,
   presence,
-  live,
+  connection,
   canChat,
   meId,
   atMs,
@@ -24,7 +24,7 @@ export function Room({
   projectId: string;
   messages: MessageWithAuthor[];
   presence: Presence[];
-  live: boolean;
+  connection: Connection;
   canChat: boolean;
   meId: string;
   /** Current playhead, when the room is open beside a player. */
@@ -77,15 +77,31 @@ export function Room({
   return (
     <div className={clsx("flex flex-col min-h-0", className)}>
       <div className="flex items-center justify-between px-4 py-3 shrink-0">
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 min-w-0">
           <span className="text-eyebrow">Room</span>
-          <span
-            className={clsx(
-              "size-1.5 rounded-full transition-colors",
-              live ? "bg-ok shadow-[0_0_7px_var(--color-ok)]" : "bg-faint/60",
-            )}
-            title={live ? "Live" : "Reconnecting…"}
-          />
+          {/* Silence is ambiguous when a connection drops, so say it outright
+              rather than dimming a dot nobody was watching. */}
+          {connection === "live" ? (
+            <span
+              className="size-1.5 rounded-full bg-ok shadow-[0_0_7px_var(--color-ok)]"
+              role="status"
+              aria-label="Live"
+            />
+          ) : connection === "down" ? (
+            <span
+              role="status"
+              className="inline-flex items-center gap-1.5 rounded-full border border-warn/25 bg-warn/[0.08] px-2 py-[1px] text-[10px] text-warn"
+            >
+              <span className="size-1 rounded-full bg-warn [animation:pulse-rec_1.4s_ease-in-out_infinite]" />
+              Reconnecting
+            </span>
+          ) : (
+            <span
+              className="size-1.5 rounded-full bg-faint/50"
+              role="status"
+              aria-label="Connecting"
+            />
+          )}
         </div>
         {presence.length > 0 ? (
           <div className="flex -space-x-1.5">

@@ -144,6 +144,7 @@ export function Timeline({
                 }}
                 onPointerDown={(e) => e.stopPropagation()}
                 title={`${timecode(label.start_ms)} · ${style.label} — ${label.title}`}
+              aria-label={`${timecode(label.start_ms)} · ${style.label} — ${label.title}`}
                 className="absolute top-0 bottom-0 group"
                 style={{
                   left: `${pct(label.start_ms)}%`,

@@ -344,6 +344,7 @@ export function Recorder({
           <button
             onClick={() => setTyping(true)}
             title="Type instead"
+              aria-label="Type instead"
             className="size-8 shrink-0 grid place-items-center rounded-[9px] text-faint hover:text-chalk hover:bg-white/[0.07] transition-colors"
           >
             <Type size={15} />

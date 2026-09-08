@@ -436,6 +436,7 @@ function ProviderGroup({
                     <button
                       onClick={() => onRemove(provider.secret)}
                       title="Remove this key"
+              aria-label="Remove this key"
                       className="size-8 shrink-0 grid place-items-center rounded-[9px] text-faint hover:text-danger hover:bg-danger/10 transition-colors"
                     >
                       <Trash2 size={13} />
@@ -710,6 +711,7 @@ function People({
                   onClick={() => remove(member.membership_id, member.name)}
                   className="size-8 shrink-0 grid place-items-center rounded-[9px] text-faint hover:text-danger hover:bg-danger/10 transition-colors"
                   title={`Remove ${member.name}`}
+              aria-label={`Remove ${member.name}`}
                 >
                   <Trash2 size={13} />
                 </button>
@@ -756,6 +758,7 @@ function People({
                     onClick={() => revoke(invite.id)}
                     className="size-8 grid place-items-center rounded-[9px] text-faint hover:text-danger hover:bg-danger/10 transition-colors"
                     title="Revoke"
+              aria-label="Revoke"
                   >
                     <Trash2 size={13} />
                   </button>

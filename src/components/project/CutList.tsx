@@ -15,6 +15,7 @@ import {
   Pencil,
 } from "lucide-react";
 import { Button, Chip, Empty, Labeled, Modal, useToast } from "@/components/ui";
+import { MarkerTrackArt } from "@/components/EmptyArt";
 import { labelStyle } from "@/lib/labelStyle";
 import { parseTimecode, relativeTime, timecode } from "@/lib/format";
 import { LABEL_TYPES, type Label, type LabelType, type Video } from "@/lib/types";
@@ -210,19 +211,31 @@ export function CutList({
 
       <div className={clsx("min-h-0", compact && "flex-1 overflow-y-auto")}>
         {visible.length === 0 ? (
-          <Empty
-            icon={<Sparkles size={17} />}
-            title={
-              scoped.length === 0
-                ? "No instructions yet"
-                : "Nothing matches those filters"
-            }
-            hint={
-              scoped.length === 0
-                ? "Record a voice note over the footage. What you say becomes this list."
-                : undefined
-            }
-          />
+          // In the walkthrough this already sits inside a panel; on the project
+          // page it needs its own surface to match the other tabs.
+          <div className={compact ? undefined : "glass rounded-[15px]"}>
+            <Empty
+              art={scoped.length === 0 ? <MarkerTrackArt /> : undefined}
+              icon={scoped.length === 0 ? undefined : <Sparkles size={17} />}
+              title={
+                scoped.length === 0
+                  ? "No instructions yet"
+                  : "Nothing matches those filters"
+              }
+              hint={
+                scoped.length === 0
+                  ? "Record a voice note over the footage. What you say becomes this list."
+                  : "Clear a filter above to see the rest."
+              }
+              action={
+                scoped.length === 0 || types.size === 0 ? null : (
+                  <Button size="sm" onClick={() => setTypes(new Set())}>
+                    Clear filters
+                  </Button>
+                )
+              }
+            />
+          </div>
         ) : (
           <ul className={clsx(compact ? "px-2 py-2 space-y-1" : "space-y-1.5")}>
             {visible.map((label) => (
@@ -359,6 +372,7 @@ function Row({
           onClick={canEdit ? onCycle : undefined}
           disabled={!canEdit}
           title={canEdit ? `Mark as ${NEXT_STATUS[label.status]}` : label.status}
+              aria-label={canEdit ? `Mark as ${NEXT_STATUS[label.status]}` : label.status}
           className={clsx(
             "mt-px size-[18px] shrink-0 grid place-items-center rounded-full border transition-colors",
             label.status === "done" && "bg-ok/20 border-ok/45 text-ok",
@@ -426,6 +440,11 @@ function Row({
                     : "text-faint hover:text-mute",
                 )}
                 title={
+                  awaitingReply
+                    ? "Waiting on an answer"
+                    : `${thread.length} message${thread.length === 1 ? "" : "s"}`
+                }
+              aria-label={
                   awaitingReply
                     ? "Waiting on an answer"
                     : `${thread.length} message${thread.length === 1 ? "" : "s"}`
@@ -545,6 +564,7 @@ function Row({
                   setExpanded(true);
                 }}
                 title={thread.length ? "Reply on this instruction" : "Ask about this instruction"}
+              aria-label={thread.length ? "Reply on this instruction" : "Ask about this instruction"}
                 className="size-6 grid place-items-center rounded-md text-faint hover:text-chalk hover:bg-white/[0.07]"
               >
                 <MessageCircle size={12} />
@@ -554,6 +574,7 @@ function Row({
               <button
                 onClick={onSkip}
                 title="Skip"
+              aria-label="Skip"
                 className="size-6 grid place-items-center rounded-md text-faint hover:text-mute hover:bg-white/[0.07]"
               >
                 <SkipForward size={12} />
@@ -564,6 +585,7 @@ function Row({
                 <button
                   onClick={onEdit}
                   title="Edit"
+              aria-label="Edit"
                   className="size-6 grid place-items-center rounded-md text-faint hover:text-chalk hover:bg-white/[0.07]"
                 >
                   <Pencil size={12} />
@@ -571,6 +593,7 @@ function Row({
                 <button
                   onClick={onDelete}
                   title="Delete"
+              aria-label="Delete"
                   className="size-6 grid place-items-center rounded-md text-faint hover:text-danger hover:bg-danger/10"
                 >
                   <Trash2 size={12} />

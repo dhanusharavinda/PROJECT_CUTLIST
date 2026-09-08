@@ -65,20 +65,20 @@ function Wordmark({ size = 17 }: { size?: number }) {
 function TopBar() {
   return (
     <header className="sticky top-0 z-50 px-4 pt-4">
-      <nav className="mx-auto max-w-6xl glass rounded-[14px] h-14 flex items-center justify-between pl-4 pr-2.5">
+      <nav className="mx-auto max-w-6xl glass rounded-[14px] h-14 flex items-center justify-between gap-2 pl-3.5 pr-2 sm:pl-4 sm:pr-2.5">
         <Wordmark />
-        <div className="flex items-center gap-1.5">
+        <div className="flex items-center gap-1 shrink-0">
           <Link
             href="/login"
-            className="h-9 px-3.5 inline-flex items-center rounded-[10px] text-[13.5px] text-chalk-dim hover:text-chalk hover:bg-white/[0.055] transition-colors"
+            className="h-9 px-2.5 sm:px-3.5 inline-flex items-center rounded-[10px] text-[13.5px] whitespace-nowrap text-chalk-dim hover:text-chalk hover:bg-white/[0.055] transition-colors"
           >
             Sign in
           </Link>
           <Link
             href="/signup"
-            className="h-9 px-4 inline-flex items-center gap-1.5 rounded-[10px] bg-signal text-ink-950 text-[13.5px] font-semibold hover:bg-[#e2ff77] transition-colors"
+            className="h-9 px-3 sm:px-4 inline-flex items-center gap-1.5 rounded-[10px] bg-signal text-ink-950 text-[13.5px] font-semibold whitespace-nowrap hover:bg-[#e2ff77] transition-colors"
           >
-            Create workspace
+            Create<span className="hidden sm:inline"> workspace</span>
             <ArrowRight size={14} />
           </Link>
         </div>
@@ -411,8 +411,8 @@ function Features() {
     },
     {
       icon: MessagesSquare,
-      title: "A room, not a thread",
-      body: "Live chat scoped to the project, with presence, so the editor's question lands beside the footage it is about instead of three apps away.",
+      title: "Questions land on the instruction",
+      body: "Live chat scoped to the project — and the editor can ask on the punch-in at 1:41 itself. The creator sees “needs an answer” against that row until they reply.",
     },
     {
       icon: FolderSync,
