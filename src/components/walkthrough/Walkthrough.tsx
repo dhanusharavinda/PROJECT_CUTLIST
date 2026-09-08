@@ -32,7 +32,7 @@ type Panel = "notes" | "cutlist" | "room";
 
 const SPEEDS = [0.5, 0.75, 1, 1.25, 1.5, 2];
 
-export function Studio({
+export function Walkthrough({
   initial,
   videoId,
 }: {
@@ -71,6 +71,10 @@ export function Studio({
     [state.notes, videoId],
   );
   const openCount = labels.filter((l) => ["open", "doing"].includes(l.status)).length;
+  const labelTitles = useMemo(
+    () => new Map(state.labels.map((l) => [l.id, l.title])),
+    [state.labels],
+  );
 
   const seek = useCallback((ms: number) => {
     const el = player.current;
@@ -86,7 +90,7 @@ export function Studio({
     else el.pause();
   }, []);
 
-  // ── Keyboard: the studio is meant to be driven without the mouse ──────────
+  // ── Keyboard: the walkthrough is meant to be driven without the mouse ─────
   useEffect(() => {
     function onKey(event: KeyboardEvent) {
       const target = event.target as HTMLElement | null;
@@ -251,7 +255,7 @@ export function Studio({
               return (
                 <Link
                   key={clip.id}
-                  href={`/app/projects/${state.project.id}/studio/${clip.id}`}
+                  href={`/app/projects/${state.project.id}/walkthrough/${clip.id}`}
                   className={clsx(
                     "block rounded-[10px] px-2.5 py-2 transition-colors",
                     clip.id === videoId
@@ -471,6 +475,9 @@ export function Studio({
               labels={state.labels}
               videos={state.videos}
               canEdit={state.capabilities.canLabel}
+              canChat={state.capabilities.canChat}
+              messages={state.messages}
+              meId={state.me.id}
               activeVideoId={videoId}
               compact
               onChanged={() => {
@@ -479,7 +486,7 @@ export function Studio({
               }}
               onSeek={(clipId, ms) => {
                 if (clipId && clipId !== videoId) {
-                  router.push(`/app/projects/${state.project.id}/studio/${clipId}`);
+                  router.push(`/app/projects/${state.project.id}/walkthrough/${clipId}`);
                   return;
                 }
                 seek(ms);
@@ -495,6 +502,7 @@ export function Studio({
               live={live}
               canChat={state.capabilities.canChat}
               meId={state.me.id}
+              labelTitles={labelTitles}
               atMs={currentMs}
               videoId={videoId}
               onSeek={seek}

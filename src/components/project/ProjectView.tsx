@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import clsx from "clsx";
 import {
   ArrowUpRight,
@@ -43,6 +43,10 @@ export function ProjectView({ initial }: { initial: ProjectDetail }) {
   const { project, capabilities, brief, videos, labels } = state;
   const status = PROJECT_STATUS_STYLE[project.status] ?? PROJECT_STATUS_STYLE.briefing;
   const openCount = labels.filter((l) => ["open", "doing"].includes(l.status)).length;
+  const labelTitles = useMemo(
+    () => new Map(labels.map((l) => [l.id, l.title])),
+    [labels],
+  );
   const overdue =
     project.due_at && project.due_at < Date.now() && project.status !== "delivered";
 
@@ -163,9 +167,9 @@ export function ProjectView({ initial }: { initial: ProjectDetail }) {
               </div>
 
               {videos.length > 0 ? (
-                <Link href={`/app/projects/${project.id}/studio/${videos[0].id}`}>
+                <Link href={`/app/projects/${project.id}/walkthrough/${videos[0].id}`}>
                   <Button variant="primary" icon={<Film size={14} />}>
-                    Open studio
+                    Open walkthrough
                   </Button>
                 </Link>
               ) : null}
@@ -248,6 +252,9 @@ export function ProjectView({ initial }: { initial: ProjectDetail }) {
               labels={labels}
               videos={videos}
               canEdit={capabilities.canLabel}
+              canChat={capabilities.canChat}
+              messages={state.messages}
+              meId={state.me.id}
               onChanged={refresh}
             />
           ) : null}
@@ -272,6 +279,7 @@ export function ProjectView({ initial }: { initial: ProjectDetail }) {
           live={live}
           canChat={capabilities.canChat}
           meId={state.me.id}
+          labelTitles={labelTitles}
           className="flex-1"
         />
       </aside>

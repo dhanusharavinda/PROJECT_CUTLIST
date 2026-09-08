@@ -176,7 +176,7 @@ export async function labelAndSave(
   return { labels, origin: result.origin, model: result.model };
 }
 
-/** The whole pipeline, as triggered from the studio after a recording lands. */
+/** The whole pipeline, as triggered from the walkthrough after a recording lands. */
 export async function processNote(
   ctx: Ctx,
   noteId: string,

@@ -18,6 +18,7 @@ export function Room({
   atMs,
   videoId,
   onSeek,
+  labelTitles,
   className,
 }: {
   projectId: string;
@@ -30,6 +31,8 @@ export function Room({
   atMs?: number;
   videoId?: string | null;
   onSeek?: (ms: number) => void;
+  /** Instruction id → title, so a pinned message can name what it is about. */
+  labelTitles?: Map<string, string>;
   className?: string;
 }) {
   const toast = useToast();
@@ -136,6 +139,7 @@ export function Room({
                 grouped={Boolean(grouped)}
                 mine={message.author_id === meId}
                 onSeek={onSeek}
+                labelTitles={labelTitles}
               />
             );
           })
@@ -201,18 +205,27 @@ function MessageRow({
   grouped,
   mine,
   onSeek,
+  labelTitles,
 }: {
   message: MessageWithAuthor;
   grouped: boolean;
   mine: boolean;
   onSeek?: (ms: number) => void;
+  labelTitles?: Map<string, string>;
 }) {
-  let meta: { atMs?: number; videoId?: string; items?: number; model?: string } = {};
+  let meta: {
+    atMs?: number;
+    videoId?: string;
+    labelId?: string;
+    items?: number;
+    model?: string;
+  } = {};
   try {
     meta = message.meta ? JSON.parse(message.meta) : {};
   } catch {
     meta = {};
   }
+  const labelTitle = meta.labelId ? labelTitles?.get(meta.labelId) : undefined;
 
   if (message.kind === "ai") {
     return (
@@ -274,9 +287,16 @@ function MessageRow({
           <button
             onClick={() => onSeek?.(meta.atMs!)}
             disabled={!onSeek}
-            className="mt-1 inline-flex items-center gap-1 rounded-full border border-white/12 px-2 py-0.5 text-[10.5px] tabular text-mute hover:text-signal hover:border-signal/35 transition-colors disabled:pointer-events-none"
+            className="mt-1 inline-flex items-center gap-1.5 rounded-full border border-white/12 px-2 py-0.5 text-[10.5px] text-mute hover:text-signal hover:border-signal/35 transition-colors disabled:pointer-events-none"
           >
-            {timecode(meta.atMs)}
+            <span className="tabular">{timecode(meta.atMs)}</span>
+            {/* Named so a reply in the room still says which instruction it is
+                about, even though the thread also lives on the row. */}
+            {labelTitle ? (
+              <span className="truncate max-w-[22ch] opacity-80">
+                on “{labelTitle}”
+              </span>
+            ) : null}
           </button>
         ) : null}
       </div>

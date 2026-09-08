@@ -14,13 +14,37 @@ they were parked on, and drops it into a shared room the editor is already in.
 
 ---
 
+## What Cutlist is not
+
+**It is not a video editor.** There is no rendering, no transcoding, no
+re-encoding, no timeline surgery, and no ffmpeg dependency anywhere in the
+codebase. Uploaded media is written to disk once, byte for byte, and thereafter
+only read back by a `<video>` element. Nothing Cutlist does changes a frame of
+your footage.
+
+Your editor still cuts in Premiere, Resolve or Final Cut. Cutlist carries the
+handoff and nothing else:
+
+| | |
+|---|---|
+| The video | a reference player with a read-only marker track |
+| The product | a timestamped, typed cut list — what, where, how |
+| The input | the creator's voice, so the brief isn't typed twice |
+| The output | Markdown, CSV or JSON the editor keeps outside this app |
+
+The word "cut list" is the film term for the decision list handed to whoever
+does the cutting. That is exactly what this produces — a document, not an edit.
+
+---
+
 ## What it actually does
 
 | | |
 |---|---|
 | **Voice notes anchored in time** | The playhead position is captured with the recording, so "cut this bit right here" resolves to a real frame instead of a guess. Explicit timestamps in speech ("at one thirty-eight") are parsed too, and carried across the rest of the sentence. |
 | **Auto-labelling, not auto-summarising** | Every instruction is typed — cut, trim, transition, filter, colour, text, caption, b-roll, sfx, music, zoom, speed, blur, keep — split out of compound sentences and ranked by how hard the creator stressed it. |
-| **A timeline you can read at a glance** | Markers sit on the scrubber in the colour of their instruction type. Click one, the player jumps there. Ranges render as bands, single moments as ticks. |
+| **"Where" becomes a click** | Markers sit on a reference scrubber in the colour of their instruction type. Click one, the player jumps there. Ranges render as bands, single moments as ticks. Seek and select are the only interactions — nothing here writes to media. |
+| **Questions land on the instruction** | The editor asks *on* the punch-in at 1:41, not three screens up in the room. The thread lives on that row, the creator sees "needs an answer" against it, and both sides stop re-describing which moment they mean. |
 | **The creator brief** | A structured form — edit type, platform, aspect, pacing, tone, captions, music, guardrails, deliverables, deadline. Filled once. It is also what the AI reads when judging the creator's notes. |
 | **A room, not a thread** | Live chat scoped to the project, with presence, and messages can carry a timestamp that jumps the player. |
 | **Second-pair-of-eyes review** | Reads the brief, every transcript and the whole cut list *together*, then says what's missing, what will bite, and what to ask before starting. |
@@ -67,7 +91,7 @@ Open <http://localhost:3000>.
 
 The seed creates a workspace with a filled brief, three voice notes with
 transcripts, the cut list they produced, and a five-minute placeholder clip that
-is generated locally so the player and timeline are live immediately:
+is generated locally so the player and marker track are live immediately:
 
 | Role | Email | Password |
 |---|---|---|
@@ -75,7 +99,8 @@ is generated locally so the player and timeline are live immediately:
 | Editor | `theo@cutlist.local` | `cutlist123` |
 
 Sign in as the editor to see the same project from the other side — read-only
-brief, workable cut list.
+brief, workable cut list, and the ability to ask a question against any single
+instruction.
 
 Without the seed, sign up and you get your own empty workspace.
 
@@ -177,7 +202,7 @@ link and send it however you like.
 
 ---
 
-## Keyboard (studio)
+## Keyboard (walkthrough)
 
 | Key | |
 |---|---|
@@ -205,13 +230,13 @@ src/
       page.tsx                     dashboard
       settings/                    AI keys, Drive, people
       projects/[id]/               brief · footage · cut list · review + room
-      projects/[id]/studio/[vid]/  player · timeline · recorder · notes
+      projects/[id]/walkthrough/[v]/ reference player · markers · recorder · notes
     api/                         route handlers
   components/
     ui.tsx                       design-system primitives
     AppShell.tsx                 sidebar, workspace switcher
     project/                     brief, footage, cut list, review, room
-    studio/                      timeline, recorder, notes panel
+    walkthrough/                 marker track, recorder, notes panel
   lib/
     schema.ts                    the single source of truth for the DDL
     db.ts                        node:sqlite wrapper + migrations
@@ -297,7 +322,7 @@ file locked. Stop the server first.
   startup. The API it uses is stable in practice; swapping in `better-sqlite3`
   would be a change to one file.
 - The seeded clip is a generated audio placeholder, not video — it exists so the
-  player and timeline are live on a fresh install. Delete it and upload real
+  player and marker track are live on a fresh install. Delete it and upload real
   footage.
 
 ---

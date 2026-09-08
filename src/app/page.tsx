@@ -23,6 +23,7 @@ export default async function Landing() {
       <main className="flex-1">
         <Hero />
         <Flow />
+        <NotAnEditor />
         <Features />
         <Closer />
       </main>
@@ -146,17 +147,17 @@ function Hero() {
           </p>
         </div>
 
-        <StudioMock />
+        <WalkthroughMock />
       </div>
     </section>
   );
 }
 
 /**
- * A real, static rendering of the studio surface. Built from the same tokens as
+ * A real, static rendering of the walkthrough surface. Built from the same tokens as
  * the app so the landing page cannot drift from what the product looks like.
  */
-function StudioMock() {
+function WalkthroughMock() {
   const markers = [
     { at: 8, type: "cut" as const },
     { at: 19, type: "broll" as const },
@@ -190,7 +191,7 @@ function StudioMock() {
         </div>
 
         <div className="grid lg:grid-cols-[1.55fr_1fr]">
-          {/* player + timeline */}
+          {/* reference player + marker track */}
           <div className="p-4 border-b lg:border-b-0 lg:border-r border-white/[0.06]">
             <div className="aspect-video rounded-[11px] bg-gradient-to-br from-ink-800 to-ink-950 border border-white/[0.06] grid place-items-center relative overflow-hidden">
               <div className="absolute inset-0 opacity-[0.55] bg-[radial-gradient(24rem_16rem_at_30%_20%,rgba(120,190,255,.14),transparent_60%),radial-gradient(20rem_14rem_at_78%_82%,rgba(214,245,94,.1),transparent_60%)]" />
@@ -201,7 +202,7 @@ function StudioMock() {
 
             <div className="mt-4">
               <div className="flex items-center justify-between mb-2">
-                <span className="text-eyebrow">Timeline</span>
+                <span className="text-eyebrow">Markers</span>
                 <span className="text-[11px] text-faint tabular">
                   8 instructions
                 </span>
@@ -345,6 +346,52 @@ function Flow() {
   );
 }
 
+/** Says plainly what Cutlist is not, so nobody arrives expecting an NLE. */
+function NotAnEditor() {
+  return (
+    <section className="px-6 py-10">
+      <div className="mx-auto max-w-6xl">
+        <div className="glass-soft rounded-[16px] px-7 py-8 sm:px-10 grid gap-7 md:grid-cols-[1.15fr_1fr] md:items-center">
+          <div>
+            <span className="text-eyebrow">To be clear</span>
+            <p className="text-display text-[clamp(1.5rem,2.6vw,2.05rem)] mt-3 leading-[1.15]">
+              Cutlist is not an editor.
+            </p>
+            <p className="text-[13.5px] text-mute mt-4 leading-[1.65] max-w-[52ch]">
+              It never touches your media — nothing is cut, rendered,
+              transcoded or re-encoded, and no file leaves here changed. Your
+              editor still cuts in Premiere, Resolve or Final Cut. Cutlist only
+              carries the handoff: what to do, where it happens, and how you
+              want it done.
+            </p>
+          </div>
+
+          <ul className="space-y-2.5">
+            {[
+              ["The video", "a reference player with a marker track"],
+              ["The product", "a timestamped, typed cut list"],
+              ["The input", "your voice, not a form you fill twice"],
+              ["The output", "Markdown, CSV or JSON your editor keeps"],
+            ].map(([label, what]) => (
+              <li
+                key={label}
+                className="flex items-baseline gap-3 border-l border-white/10 pl-3.5"
+              >
+                <span className="text-[11px] text-faint w-[5.5rem] shrink-0">
+                  {label}
+                </span>
+                <span className="text-[13px] text-chalk-dim leading-snug">
+                  {what}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      </div>
+    </section>
+  );
+}
+
 function Features() {
   const features = [
     {
@@ -359,8 +406,8 @@ function Features() {
     },
     {
       icon: Timer,
-      title: "A timeline you can read at a glance",
-      body: "Markers sit on the scrubber in the colour of their instruction type. Click one, the player jumps there. That is the whole interaction.",
+      title: "“Where” becomes a click",
+      body: "Markers sit on a reference scrubber in the colour of their instruction type. Click one, the player jumps there. The video is a map, never a work surface.",
     },
     {
       icon: MessagesSquare,

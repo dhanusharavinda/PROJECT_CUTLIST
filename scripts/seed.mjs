@@ -275,12 +275,15 @@ const LABELS = [
   [2, "music", "Low lo-fi bed under this section", "Marked optional — 'if you have time'. Epidemic Sound, nothing under the talking.", 240_000, null, "low", "open"],
 ];
 
+const labelIds = {};
 for (const [noteIndex, type, title, detail, start, end, priority, status] of LABELS) {
+  const labelId = id("lab");
+  labelIds[type] = labelId;
   insert(
     `INSERT INTO labels (id, workspace_id, project_id, video_id, note_id, type, title, detail,
                          start_ms, end_ms, priority, status, confidence, origin, assignee_id, created_at, updated_at)
      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-    id("lab"),
+    labelId,
     workspace,
     project,
     video,
@@ -302,15 +305,24 @@ for (const [noteIndex, type, title, detail, start, end, priority, status] of LAB
 
 // ── The room ────────────────────────────────────────────────────────────────
 
+// The middle two are pinned to the zoom instruction rather than floating in the
+// room — that is the shape the product is actually for: the question lives on
+// the thing it is about, so nobody re-describes which moment they mean.
+const pinnedToZoom = {
+  labelId: labelIds.zoom,
+  atMs: 101_000,
+  videoId: video,
+};
+
 const CHAT = [
-  [theo, "text", "Got the brief, thanks — the 'must keep' on the shelf collapse is helpful, I'd have trimmed it.", ago(90)],
-  [ada, "text", "Ha, that's the entire reason the video exists. Leave every frame of it.", ago(88)],
-  [theo, "text", "On the punch-in at 1:41 — how hard? Brief says no zooms in the intro so I don't want to overdo it elsewhere.", ago(40)],
-  [ada, "text", "Gentle. 10% over about half a second, ease out. Same as ep 39.", ago(36)],
-  [theo, "text", "Perfect. Colour pass and the blur are done first, I'll push a v1 tomorrow morning.", ago(34)],
+  [theo, "text", "Got the brief, thanks — the 'must keep' on the shelf collapse is helpful, I'd have trimmed it.", ago(90), null],
+  [ada, "text", "Ha, that's the entire reason the video exists. Leave every frame of it.", ago(88), null],
+  [theo, "text", "How hard is this punch-in? The brief says no zooms in the intro and I don't want to overdo it here.", ago(40), pinnedToZoom],
+  [ada, "text", "Gentle — 10% over about half a second, ease out. Same as ep 39.", ago(36), pinnedToZoom],
+  [theo, "text", "Perfect. Colour pass and the blur are done first, I'll push a v1 tomorrow morning.", ago(34), null],
 ];
 
-for (const [author, kind, bodyText, at] of CHAT) {
+for (const [author, kind, bodyText, at, meta] of CHAT) {
   insert(
     "INSERT INTO messages (id, workspace_id, project_id, author_id, kind, body, meta, created_at) VALUES (?,?,?,?,?,?,?,?)",
     id("msg"),
@@ -319,7 +331,7 @@ for (const [author, kind, bodyText, at] of CHAT) {
     author,
     kind,
     bodyText,
-    null,
+    meta ? JSON.stringify(meta) : null,
     at,
   );
 }

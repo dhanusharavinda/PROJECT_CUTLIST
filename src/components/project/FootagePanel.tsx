@@ -176,7 +176,7 @@ export function FootagePanel({
             title="No footage attached"
             hint={
               canUpload
-                ? "Upload a clip, pull one from Drive, or point at a URL. Then open the studio and talk over it."
+                ? "Upload a clip, pull one from Drive, or point at a URL. Then open the walkthrough and talk the editor through it."
                 : "The creator hasn't attached footage yet."
             }
           />
@@ -189,7 +189,7 @@ export function FootagePanel({
               className="glass rounded-[14px] overflow-hidden group"
             >
               <Link
-                href={`/app/projects/${projectId}/studio/${video.id}`}
+                href={`/app/projects/${projectId}/walkthrough/${video.id}`}
                 className="block aspect-video relative bg-gradient-to-br from-ink-800 to-ink-950"
               >
                 <span className="absolute inset-0 grid place-items-center">

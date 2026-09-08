@@ -11,12 +11,14 @@ import {
   SkipForward,
   Sparkles,
   Trash2,
+  MessageCircle,
   Pencil,
 } from "lucide-react";
 import { Button, Chip, Empty, Labeled, Modal, useToast } from "@/components/ui";
 import { labelStyle } from "@/lib/labelStyle";
-import { parseTimecode, timecode } from "@/lib/format";
+import { parseTimecode, relativeTime, timecode } from "@/lib/format";
 import { LABEL_TYPES, type Label, type LabelType, type Video } from "@/lib/types";
+import type { MessageWithAuthor } from "@/lib/queries";
 import { api } from "./useProject";
 
 type StatusFilter = "all" | "open" | "done";
@@ -37,6 +39,9 @@ export function CutList({
   onSeek,
   activeVideoId,
   compact,
+  messages = [],
+  meId,
+  canChat = false,
 }: {
   projectId: string;
   labels: Label[];
@@ -47,12 +52,36 @@ export function CutList({
   /** When set, only this clip's instructions are shown. */
   activeVideoId?: string | null;
   compact?: boolean;
+  /** Room messages — the ones pinned to an instruction surface on its row. */
+  messages?: MessageWithAuthor[];
+  meId?: string;
+  canChat?: boolean;
 }) {
   const toast = useToast();
   const [status, setStatus] = useState<StatusFilter>("open");
   const [types, setTypes] = useState<Set<LabelType>>(new Set());
   const [editing, setEditing] = useState<Label | null>(null);
   const [creating, setCreating] = useState(false);
+
+  /**
+   * "How hard is the punch-in at 1:41?" belongs on the punch-in, not three
+   * screens up in the room. Messages carrying a labelId are threaded here.
+   */
+  const threads = useMemo(() => {
+    const byLabel = new Map<string, MessageWithAuthor[]>();
+    for (const message of messages) {
+      if (!message.meta) continue;
+      let labelId: string | undefined;
+      try {
+        labelId = (JSON.parse(message.meta) as { labelId?: string }).labelId;
+      } catch {
+        continue;
+      }
+      if (!labelId) continue;
+      byLabel.set(labelId, [...(byLabel.get(labelId) ?? []), message]);
+    }
+    return byLabel;
+  }, [messages]);
 
   const scoped = useMemo(
     () =>
@@ -107,7 +136,7 @@ export function CutList({
   return (
     <div className="flex flex-col min-h-0">
       {/* Two rows rather than one wrapping row: the type filters can run to a
-          dozen chips, and in the studio's narrow side panel a single row
+          dozen chips, and in the walkthrough's narrow side panel a single row
           collapses into an unreadable overflow. */}
       <div className={clsx("shrink-0 space-y-2", compact ? "px-3 py-3" : "mb-4")}>
         <div className="flex items-center gap-2">
@@ -199,10 +228,15 @@ export function CutList({
             {visible.map((label) => (
               <Row
                 key={label.id}
+                projectId={projectId}
                 label={label}
                 clip={label.video_id ? titleById.get(label.video_id) : null}
                 showClip={activeVideoId === undefined && videos.length > 1}
                 canEdit={canEdit}
+                canChat={canChat}
+                meId={meId}
+                thread={threads.get(label.id) ?? []}
+                onChanged={onChanged}
                 onSeek={onSeek}
                 onCycle={() => patch(label, { status: NEXT_STATUS[label.status] })}
                 onSkip={() => patch(label, { status: "skipped" })}
@@ -231,30 +265,80 @@ export function CutList({
 }
 
 function Row({
+  projectId,
   label,
   clip,
   showClip,
   canEdit,
+  canChat,
+  meId,
+  thread,
+  onChanged,
   onSeek,
   onCycle,
   onSkip,
   onEdit,
   onDelete,
 }: {
+  projectId: string;
   label: Label;
   clip?: string | null;
   showClip: boolean;
   canEdit: boolean;
+  canChat: boolean;
+  meId?: string;
+  thread: MessageWithAuthor[];
+  onChanged: () => void;
   onSeek?: (videoId: string | null, ms: number) => void;
   onCycle: () => void;
   onSkip: () => void;
   onEdit: () => void;
   onDelete: () => void;
 }) {
+  const toast = useToast();
   const [expanded, setExpanded] = useState(false);
+  const [asking, setAsking] = useState(false);
+  const [draft, setDraft] = useState("");
+  const [sending, setSending] = useState(false);
   const style = labelStyle(label.type);
   const finished = label.status === "done" || label.status === "skipped";
   const hasDetail = Boolean(label.detail && label.detail !== label.title);
+
+  // Someone asked and nobody else has replied since — that is what needs
+  // the creator's attention, so it is what the row shouts about.
+  const awaitingReply =
+    thread.length > 0 &&
+    thread[thread.length - 1].author_id !== meId &&
+    !thread.some(
+      (m, i) => i > 0 && m.author_id === meId && m.author_id !== thread[0].author_id,
+    );
+
+  async function ask() {
+    const text = draft.trim();
+    if (!text || sending) return;
+    setSending(true);
+    try {
+      await api(`/api/projects/${projectId}/messages`, {
+        method: "POST",
+        json: {
+          body: text,
+          meta: {
+            labelId: label.id,
+            atMs: label.start_ms,
+            videoId: label.video_id ?? undefined,
+          },
+        },
+      });
+      setDraft("");
+      setAsking(false);
+      setExpanded(true);
+      onChanged();
+    } catch (err) {
+      toast((err as Error).message, "error");
+    } finally {
+      setSending(false);
+    }
+  }
 
   return (
     <li
@@ -331,18 +415,41 @@ function Row({
                 {clip}
               </span>
             ) : null}
+
+            {thread.length > 0 ? (
+              <button
+                onClick={() => setExpanded(true)}
+                className={clsx(
+                  "inline-flex items-center gap-1 text-[10px] transition-colors",
+                  awaitingReply
+                    ? "text-warn"
+                    : "text-faint hover:text-mute",
+                )}
+                title={
+                  awaitingReply
+                    ? "Waiting on an answer"
+                    : `${thread.length} message${thread.length === 1 ? "" : "s"}`
+                }
+              >
+                <MessageCircle size={10} />
+                {thread.length}
+                {awaitingReply ? " · needs an answer" : ""}
+              </button>
+            ) : null}
           </div>
 
           <button
-            onClick={() => hasDetail && setExpanded((v) => !v)}
+            onClick={() =>
+              (hasDetail || thread.length > 0) && setExpanded((v) => !v)
+            }
             className={clsx(
               "block text-left w-full mt-1 text-[13px] leading-snug",
               finished ? "text-faint line-through" : "text-chalk-dim",
-              hasDetail && "cursor-pointer",
+              (hasDetail || thread.length > 0) && "cursor-pointer",
             )}
           >
             {label.title}
-            {hasDetail ? (
+            {hasDetail || thread.length > 0 ? (
               <ChevronRight
                 size={12}
                 className={clsx(
@@ -358,11 +465,92 @@ function Row({
               {label.detail}
             </p>
           ) : null}
+
+          {expanded && thread.length > 0 ? (
+            <ul className="mt-2 space-y-1.5">
+              {thread.map((message) => (
+                <li
+                  key={message.id}
+                  className="rounded-[8px] bg-white/[0.03] border border-white/[0.06] px-2.5 py-1.5"
+                >
+                  <div className="flex items-baseline gap-1.5">
+                    <span
+                      className={clsx(
+                        "text-[10.5px] font-medium",
+                        message.author_id === meId ? "text-signal" : "text-chalk",
+                      )}
+                    >
+                      {message.author_id === meId
+                        ? "You"
+                        : (message.author_name ?? "Unknown")}
+                    </span>
+                    <span className="text-[9.5px] text-faint">
+                      {relativeTime(message.created_at)}
+                    </span>
+                  </div>
+                  <p className="text-[12px] text-mute leading-relaxed mt-0.5 whitespace-pre-wrap break-words">
+                    {message.body}
+                  </p>
+                </li>
+              ))}
+            </ul>
+          ) : null}
+
+          {asking ? (
+            <div className="mt-2">
+              <textarea
+                autoFocus
+                rows={2}
+                value={draft}
+                onChange={(e) => setDraft(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && !e.shiftKey) {
+                    e.preventDefault();
+                    ask();
+                  }
+                  if (e.key === "Escape") setAsking(false);
+                }}
+                placeholder={
+                  thread.length ? "Reply…" : "What do you need to know about this?"
+                }
+                className="field resize-none text-[12px] leading-relaxed"
+              />
+              <div className="flex items-center justify-end gap-2 mt-1.5">
+                <button
+                  onClick={() => setAsking(false)}
+                  className="text-[11px] text-faint hover:text-chalk"
+                >
+                  Cancel
+                </button>
+                <Button
+                  size="sm"
+                  variant="primary"
+                  loading={sending}
+                  disabled={!draft.trim()}
+                  onClick={ask}
+                >
+                  {thread.length ? "Reply" : "Ask"}
+                </Button>
+              </div>
+            </div>
+          ) : null}
         </div>
 
-        {canEdit ? (
+        {canEdit || canChat ? (
           <div className="flex items-center gap-0.5 shrink-0 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
-            {!finished ? (
+            {canChat ? (
+              <button
+                onClick={() => {
+                  setAsking((v) => !v);
+                  setExpanded(true);
+                }}
+                title={thread.length ? "Reply on this instruction" : "Ask about this instruction"}
+                className="size-6 grid place-items-center rounded-md text-faint hover:text-chalk hover:bg-white/[0.07]"
+              >
+                <MessageCircle size={12} />
+              </button>
+            ) : null}
+            {canEdit && !finished ? (
               <button
                 onClick={onSkip}
                 title="Skip"
@@ -371,20 +559,24 @@ function Row({
                 <SkipForward size={12} />
               </button>
             ) : null}
-            <button
-              onClick={onEdit}
-              title="Edit"
-              className="size-6 grid place-items-center rounded-md text-faint hover:text-chalk hover:bg-white/[0.07]"
-            >
-              <Pencil size={12} />
-            </button>
-            <button
-              onClick={onDelete}
-              title="Delete"
-              className="size-6 grid place-items-center rounded-md text-faint hover:text-danger hover:bg-danger/10"
-            >
-              <Trash2 size={12} />
-            </button>
+            {canEdit ? (
+              <>
+                <button
+                  onClick={onEdit}
+                  title="Edit"
+                  className="size-6 grid place-items-center rounded-md text-faint hover:text-chalk hover:bg-white/[0.07]"
+                >
+                  <Pencil size={12} />
+                </button>
+                <button
+                  onClick={onDelete}
+                  title="Delete"
+                  className="size-6 grid place-items-center rounded-md text-faint hover:text-danger hover:bg-danger/10"
+                >
+                  <Trash2 size={12} />
+                </button>
+              </>
+            ) : null}
           </div>
         ) : null}
       </div>

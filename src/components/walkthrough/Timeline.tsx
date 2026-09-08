@@ -7,8 +7,11 @@ import { timecode } from "@/lib/format";
 import type { Label } from "@/lib/types";
 
 /**
- * The timeline is the product in one control: every instruction the creator
- * spoke, sitting at the frame they spoke about, in the colour of its type.
+ * A marker track over a reference clip — NOT an edit timeline.
+ *
+ * Nothing here modifies media. It is a read-only time axis showing where each
+ * spoken instruction landed, so "where" is a click instead of a sentence. The
+ * only interactions are seek and select.
  */
 export function Timeline({
   durationMs,
@@ -60,7 +63,7 @@ export function Timeline({
   return (
     <div className="select-none">
       <div className="flex items-center justify-between mb-1.5 px-0.5">
-        <span className="text-eyebrow">Timeline</span>
+        <span className="text-eyebrow">Markers</span>
         <span className="text-[10.5px] text-faint tabular">
           {labels.length} instruction{labels.length === 1 ? "" : "s"} ·{" "}
           {noteAnchors.length} note{noteAnchors.length === 1 ? "" : "s"}

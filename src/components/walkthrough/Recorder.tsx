@@ -35,7 +35,7 @@ export function Recorder({
   onDone: (summary: { labels: number; warning?: string }) => void;
   disabled?: boolean;
   sttLabel: string | null;
-  /** Lets the studio bind the R key to this recorder. */
+  /** Lets the walkthrough bind the R key to this recorder. */
   registerTrigger?: (toggle: () => void) => void;
 }) {
   const toast = useToast();
