@@ -7,6 +7,7 @@ import { listFrames } from "../analysis/store";
 import { shotRecord } from "../analysis/intel";
 import { buildEditGraph, type EditGraph } from "../graph/build";
 import { recordEvent } from "../graph/events";
+import { memoryPrompt, styleMemory, type StyleMemory } from "./memory";
 import {
   proposeMany,
   RECOMMENDATION_TYPES,
@@ -42,6 +43,8 @@ export interface DirectorOptions {
   /** The creator's request, for a revision. */
   request?: string | null;
   tier?: Tier;
+  /** Filled in by runDirector; here so userPrompt stays a pure function. */
+  memory?: StyleMemory | null;
 }
 
 export interface DirectorResult {
@@ -214,6 +217,8 @@ ${instructions || "(none)"}
 DECISIONS ON EARLIER SUGGESTIONS (respect these):
 ${decided || "(none yet)"}
 
+${options.memory ? memoryPrompt(options.memory) : ""}
+
 UNRESOLVED: ${graph.unresolved.open_instructions} open instructions, ${graph.unresolved.unanswered_questions} unanswered questions${graph.unresolved.conflicts.length ? `, conflicts: ${graph.unresolved.conflicts.join(" ")}` : ""}`;
 }
 
@@ -280,6 +285,8 @@ export async function runDirector(
   }
 
   const frames = await pickFrames(ctx, graph, 12);
+  const memory = styleMemory(ctx, projectId);
+  const withMemory: DirectorOptions = { ...options, memory };
 
   const result = await complete(ctx.workspace.id, {
     tier: options.tier ?? "standard",
@@ -287,8 +294,8 @@ export async function runDirector(
     projectId,
     json: true,
     maxTokens: 4000,
-    system: systemPrompt(options),
-    user: `${userPrompt(graph, options)}\n\nFRAMES ATTACHED: ${frames.map((f, i) => `${i}=${f.label}`).join(", ") || "none"}`,
+    system: systemPrompt(withMemory),
+    user: `${userPrompt(graph, withMemory)}\n\nFRAMES ATTACHED: ${frames.map((f, i) => `${i}=${f.label}`).join(", ") || "none"}`,
     images: frames.map((f) => ({ mime: f.mime, data: f.data })),
   });
 

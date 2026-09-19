@@ -5,6 +5,7 @@ import { shotRecord } from "@/lib/analysis/intel";
 import { listFrames } from "@/lib/analysis/store";
 import { readBuffer } from "@/lib/storage";
 import { getProject } from "@/lib/tenancy";
+import { styleMemory } from "@/lib/director/memory";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -48,6 +49,7 @@ const TOOLS = [
   { name: "get_edit_graph", description: "Everything at once, compacted: the full EditGraph.", input: {} },
   { name: "get_current_revision", description: "The latest version, its approval state and what changed.", input: {} },
   { name: "get_unresolved_items", description: "Open instructions, undecided suggestions, unanswered questions, missing links, conflicts.", input: {} },
+  { name: "get_style_memory", description: "What this creator tends to accept and reject, their house rules and favourite template, counted from past decisions.", input: {} },
 ] as const;
 
 function toolList() {
@@ -133,6 +135,8 @@ async function runTool(principal: TokenPrincipal, name: string, args: Record<str
         ? { ...latest, project_status: project.status, owner_state: project.owner_state }
         : { version: null, owner_state: project.owner_state, note: "No version has been recorded yet." };
     }
+    case "get_style_memory":
+      return styleMemory(ctx, projectId);
     case "get_unresolved_items":
       return {
         ...graph.unresolved,
@@ -202,6 +206,11 @@ export async function POST(req: Request) {
 
   const principal = authenticateToken(bearerFrom(req));
   if (!principal) return rpcError(id, -32001, "A valid project token is required.", 401);
+
+  // Clients often probe these on connect; this server has none of either.
+  if (method === "resources/list") return NextResponse.json({ jsonrpc: "2.0", id: id ?? null, result: { resources: [] } });
+  if (method === "resources/templates/list") return NextResponse.json({ jsonrpc: "2.0", id: id ?? null, result: { resourceTemplates: [] } });
+  if (method === "prompts/list") return NextResponse.json({ jsonrpc: "2.0", id: id ?? null, result: { prompts: [] } });
 
   if (method === "tools/list") {
     return NextResponse.json({ jsonrpc: "2.0", id: id ?? null, result: { tools: toolList() } });

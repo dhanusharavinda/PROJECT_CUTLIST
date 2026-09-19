@@ -2,7 +2,7 @@ import type { Ctx } from "../tenancy";
 import { buildEditGraph, compactGraph } from "../graph/build";
 import { createProjectVersion, type VersionKind } from "../graph/versions";
 import { actorFor } from "../graph/events";
-import { reelView } from "../reel/store";
+import { versionSnapshot } from "../graph/snapshot";
 
 /**
  * Where the edit gets executed, behind one interface.
@@ -119,24 +119,13 @@ const fileHandoff: EditorConnector = {
   async syncState({ ctx, projectId }, payload) {
     const kind = payload.kind ?? "human_edit";
     const actorKind = kind === "ai_draft" || kind === "ai_revision" ? "ai" : actorFor(ctx.role);
-    const reel = reelView(ctx, projectId);
     const version = createProjectVersion(ctx, projectId, {
       kind,
       summary: payload.summary ?? "Synced from a file handoff",
       actorKind,
       actorId: actorKind === "ai" ? ctx.user.id : undefined,
       videoId: payload.video_id ?? null,
-      payload: {
-        slots:
-          payload.slots ??
-          reel.slots.map((s) => ({ video_id: s.video_id, in_ms: s.in_ms, out_ms: s.out_ms })),
-        total_ms: payload.slots
-          ? payload.slots.reduce((t, s) => t + Math.max(0, s.out_ms - s.in_ms), 0)
-          : reel.total_ms,
-        completed: payload.completed ?? [],
-        unresolved: payload.unresolved ?? [],
-        changes: payload.changes ?? [],
-      },
+      payload: versionSnapshot(ctx, projectId, actorKind, payload),
     });
     return { version_id: version.id, label: version.label };
   },

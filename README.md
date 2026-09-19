@@ -344,6 +344,16 @@ that scope. The lock is named to the model and enforced on the way out, so
 "leave the hook alone" cannot be lost to a good idea. The result is recorded as
 an AI revision with the scope on it.
 
+### Style memory
+
+The director reads what this creator tends to do before it proposes, and
+nothing about it is guessed: it is counted from decisions already made across
+the workspace. Which kinds of suggestion get accepted and which get rejected,
+the exact suggestions turned down recently (never proposed again), the rules
+that recur across briefs, and the template used most with its editing rules.
+The Plan tab shows the same readout under "What the director remembers about
+you", and an outside agent gets it as the `get_style_memory` tool.
+
 ### Versions, ownership and review
 
 **History** tab. A version is a snapshot with a kind (AI draft, human edit,
@@ -379,10 +389,10 @@ links to the footage instead.
 
 History tab, bottom panel, **New token**. Paste the token and the MCP URL into
 ChatGPT (a connector), Astra, or any client that speaks MCP over streamable
-HTTP. The agent gets thirteen tools, all reads: project, brief, template,
+HTTP. The agent gets fourteen tools, all reads: project, brief, template,
 template version, media manifest, shot analysis, representative frames,
 transcript, creator instructions, AI recommendations, edit graph, current
-revision, unresolved items. One token reads one project. Only a hash is stored;
+revision, unresolved items, style memory. One token reads one project. Only a hash is stored;
 revoke it and the door closes.
 
 The server is `POST /api/mcp`; `GET /api/mcp` returns the server card. It must

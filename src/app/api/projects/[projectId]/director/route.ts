@@ -4,6 +4,7 @@ import { assert, badRequest, can, getProject, requireCtx } from "@/lib/tenancy";
 import { emit } from "@/lib/activity";
 import { LlmUnavailable } from "@/lib/ai/llm";
 import { NothingToDirect, runDirector } from "@/lib/director/run";
+import { styleMemory } from "@/lib/director/memory";
 import { createProjectVersion, listProjectVersions } from "@/lib/graph/versions";
 import { recordEvent } from "@/lib/graph/events";
 
@@ -12,6 +13,14 @@ type Params = { params: Promise<{ projectId: string }> };
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
+
+/** What the director remembers about this creator before it proposes. */
+export const GET = route(async (_req, { params }: Params) => {
+  const ctx = await requireCtx();
+  const { projectId } = await params;
+  getProject(ctx, projectId);
+  return json({ memory: styleMemory(ctx, projectId) });
+});
 
 /**
  * The full director pass over the project.

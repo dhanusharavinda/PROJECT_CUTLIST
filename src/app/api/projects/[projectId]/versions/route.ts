@@ -8,11 +8,7 @@ import {
   listProjectVersions,
   VERSION_KINDS,
 } from "@/lib/graph/versions";
-import { reelView } from "@/lib/reel/store";
-import { listLabels } from "@/lib/queries";
-import { listRecommendations } from "@/lib/graph/recommendations";
-import { diffSnapshots, ignoredLine } from "@/lib/graph/diff";
-import { listVideos } from "@/lib/queries";
+import { versionSnapshot } from "@/lib/graph/snapshot";
 
 type Params = { params: Promise<{ projectId: string }> };
 
@@ -56,30 +52,8 @@ export const POST = route(async (req, { params }: Params) => {
     }
   }
 
-  const reel = reelView(ctx, projectId);
-  const labels = listLabels(ctx, projectId);
-  const recs = listRecommendations(ctx, projectId, { live: true });
-
   const actorKind =
     input.kind === "ai_draft" || input.kind === "ai_revision" ? "ai" : actorFor(ctx.role);
-
-  // What changed is measured against the previous version, never invented.
-  // Anything the person wrote themselves comes first; the measured lines follow.
-  const previous = listProjectVersions(ctx, projectId).at(-1) ?? null;
-  const names = new Map(listVideos(ctx, projectId).map((v) => [v.id, v.source_name || v.title]));
-  const who = actorKind === "ai" ? "AI" : actorKind === "creator" ? "Creator" : "Human";
-  const snapshot = {
-    slots: reel.slots.map((s) => ({ video_id: s.video_id, in_ms: s.in_ms, out_ms: s.out_ms })),
-    total_ms: reel.total_ms,
-  };
-  const measured = diffSnapshots(previous?.payload ?? null, snapshot, names, who).map((d) => d.text);
-  const ignored =
-    who === "Human" || who === "AI"
-      ? ignoredLine(recs.filter((r) => r.status === "approved").length, who)
-      : null;
-  const changes = [...(input.changes ?? []), ...measured, ...(ignored ? [ignored.text] : [])].filter(
-    (line, index, all) => all.indexOf(line) === index,
-  );
 
   const version = createProjectVersion(ctx, projectId, {
     kind: input.kind,
@@ -88,15 +62,7 @@ export const POST = route(async (req, { params }: Params) => {
     actorKind,
     actorId: actorKind === "ai" ? ctx.user.id : undefined,
     videoId: input.videoId ?? null,
-    payload: {
-      slots: reel.slots.map((s) => ({ video_id: s.video_id, in_ms: s.in_ms, out_ms: s.out_ms })),
-      total_ms: reel.total_ms,
-      open_instructions: labels.filter((l) => l.status === "open" || l.status === "doing").length,
-      proposed_recommendations: recs.filter((r) => r.status === "proposed").length,
-      completed: input.completed ?? [],
-      unresolved: input.unresolved ?? [],
-      changes,
-    },
+    payload: versionSnapshot(ctx, projectId, actorKind, input),
   });
 
   emit(

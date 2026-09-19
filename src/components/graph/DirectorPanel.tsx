@@ -1,11 +1,12 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { Bot, Lock, Sparkles, Wand2 } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { Bot, Brain, Lock, Sparkles, Wand2 } from "lucide-react";
 import { Button, Panel, PanelHeader, useToast } from "@/components/ui";
 import { RecommendationRow } from "@/components/graph/RecommendationRow";
 import { api } from "@/components/project/useProject";
 import type { Recommendation } from "@/lib/graph/recommendations";
+import type { StyleMemory } from "@/lib/director/memory";
 
 /**
  * The creative director, at project level.
@@ -48,6 +49,20 @@ export function DirectorPanel({
   const [request, setRequest] = useState("");
   const [lastPlan, setLastPlan] = useState<{ modify: string[]; lock: string[]; summary: string } | null>(null);
   const [headline, setHeadline] = useState<string | null>(null);
+  const [memory, setMemory] = useState<StyleMemory | null>(null);
+
+  // What the director will read about this creator before it proposes.
+  useEffect(() => {
+    let live = true;
+    api<{ memory: StyleMemory }>(`/api/projects/${projectId}/director`)
+      .then((res) => {
+        if (live) setMemory(res.memory);
+      })
+      .catch(() => undefined);
+    return () => {
+      live = false;
+    };
+  }, [projectId, recommendations]);
 
   const projectWide = useMemo(
     () => recommendations.filter((r) => r.video_id === null && r.status !== "superseded"),
@@ -134,6 +149,26 @@ export function DirectorPanel({
           suggestions you approve, change or reject. It never touches the cut list on its own.
           {blocked ? <span className="block mt-1.5 text-warn">{blocked}</span> : null}
         </p>
+
+        {memory && (memory.tendencies.length || memory.rejected.length || memory.house_rules.length || memory.template) ? (
+          <details className="group">
+            <summary className="text-[11.5px] text-faint cursor-pointer hover:text-mute list-none flex items-center gap-1.5">
+              <Brain size={12} /> What the director remembers about you ({memory.sample_size} decisions counted)
+            </summary>
+            <ul className="mt-2 space-y-1 text-[12px] text-mute leading-relaxed">
+              {memory.tendencies.map((t) => (
+                <li key={t}>{t}</li>
+              ))}
+              {memory.rejected.length ? <li>Will not propose again: {memory.rejected.join("; ")}</li> : null}
+              {memory.house_rules.length ? <li>House rules: {memory.house_rules.join("; ")}</li> : null}
+              {memory.template ? (
+                <li>
+                  Favourite template: {memory.template.name} ({memory.template.uses} uses)
+                </li>
+              ) : null}
+            </ul>
+          </details>
+        ) : null}
 
         {headline ? (
           <p className="text-[13px] text-chalk flex items-start gap-2">

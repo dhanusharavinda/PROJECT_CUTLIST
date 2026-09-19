@@ -115,6 +115,17 @@ export function authenticateToken(bearer: string | null): TokenPrincipal | null 
   if (!workspace) return null;
   const issuer = row.created_by ? one<User>("SELECT * FROM users WHERE id = ?", row.created_by) : null;
 
+  // A token outlives its issuer's membership only on paper: once they are out
+  // of the workspace, everything they issued stops working too.
+  if (row.created_by) {
+    const member = one<{ id: string }>(
+      "SELECT id FROM memberships WHERE workspace_id = ? AND user_id = ?",
+      row.workspace_id,
+      row.created_by,
+    );
+    if (!member) return null;
+  }
+
   run("UPDATE access_tokens SET last_used_at = ? WHERE id = ?", now(), row.id);
 
   const role: Role = "viewer";
