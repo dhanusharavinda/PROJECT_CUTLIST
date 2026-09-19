@@ -98,7 +98,7 @@ export function useProject(initial: ProjectDetail) {
       }
     });
 
-    for (const type of ["note", "label", "video", "brief", "suggestion", "reel"]) {
+    for (const type of ["note", "label", "video", "brief", "suggestion", "reel", "graph"]) {
       source.addEventListener(type, scheduleRefresh);
     }
 

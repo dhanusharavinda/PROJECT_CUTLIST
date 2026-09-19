@@ -16,6 +16,7 @@ import {
 } from "./store";
 import type { AnalysisPayload, ClipSpeech, Orientation, Shot } from "./types";
 import { sampleFrame, sceneScan, shotsFrom } from "./video";
+import { intelligence } from "./intel";
 
 /**
  * One clip, understood end to end: what it looks like, how it is cut, what the
@@ -292,15 +293,19 @@ export async function runAnalysis(ctx: Ctx, video: Video): Promise<void> {
   if (audio && audio.bpm === 0 && audio.beat_confidence < 0.35 && meta.has_audio)
     warnings.push("No steady tempo found, so beat-matched cuts are not available for this clip.");
 
+  // Camera movement, opener score, repeats, weak stretches and B-roll
+  // candidates: all arithmetic over what was just measured, so it is free.
+  const shotsWithIntel = intelligence(shots, audio?.speech ?? []);
+
   const payload: AnalysisPayload = {
-    version: 1,
+    version: 2,
     orientation,
     width: meta.width,
     height: meta.height,
     fps: meta.fps,
     duration_ms: durationMs,
     has_audio: meta.has_audio,
-    shots,
+    shots: shotsWithIntel,
     beats: audio?.beats ?? [],
     bpm: audio?.bpm ?? 0,
     beat_confidence: audio?.beat_confidence ?? 0,

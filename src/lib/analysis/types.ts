@@ -16,6 +16,46 @@ export interface Shot {
   /** Low, even motion: usable for masking, freeze frames and clone effects. */
   stable: boolean;
   frame_idx: number | null;
+  /** Derived from the numbers by intel.ts. Optional so older payloads still load. */
+  camera?: Camera;
+  /** How well this shot would open a reel, 0 to 1. */
+  hook_score?: number;
+  /** An earlier shot this one repeats, or null. */
+  duplicate_of?: number | null;
+  /** Why the shot is weak, or null when it is fine. */
+  weak?: string | null;
+  /** Moving picture with nobody talking over it: something to cut away to. */
+  broll?: boolean;
+  /** What a model saw in the sampled frame, when the enrich pass has run. */
+  intel?: ShotIntel | null;
+}
+
+/** How much the picture moves, in words an editor uses. */
+export type Camera = "static" | "gentle" | "moving" | "fast";
+
+/** What only eyes can tell: filled by the model pass, never by arithmetic. */
+export interface ShotIntel {
+  subject: "none" | "person" | "people" | "object" | "scene";
+  face: "none" | "partial" | "clear";
+  framing: "wide" | "medium" | "close_up" | "extreme_close_up" | "unknown";
+  composition: string;
+  quality: "poor" | "ok" | "good";
+  /** A screen, a document, a bystander's face: something a creator usually hides. */
+  blur_candidate: boolean;
+  notes: string[];
+}
+
+/** One shot as an outside agent reads it. Built by intel.ts shotRecord. */
+export interface ShotRecord {
+  shot_id: string;
+  source_clip: string;
+  start: number;
+  end: number;
+  movement: Camera;
+  composition: string;
+  subject_visibility: "none" | "weak" | "strong" | "unknown";
+  hook_score: number;
+  notes: string[];
 }
 
 export interface Range {
@@ -55,6 +95,8 @@ export interface AnalysisPayload {
   frames: { idx: number; at_ms: number }[];
   speech_text: ClipSpeech | null;
   warnings: string[];
+  /** Set once the model has read the frames. */
+  enriched?: { at: number; model: string; frames: number } | null;
 }
 
 export interface AnalysisRow {

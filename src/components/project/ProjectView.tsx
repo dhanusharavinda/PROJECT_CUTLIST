@@ -8,6 +8,7 @@ import {
   ClipboardList,
   Download,
   Film,
+  History,
   ListChecks,
   ListOrdered,
   Sparkles,
@@ -15,6 +16,10 @@ import {
   Wand2,
 } from "lucide-react";
 import { Button, Meter, Segmented, useToast } from "@/components/ui";
+import { OwnerState } from "@/components/graph/OwnerState";
+import { DirectorPanel } from "@/components/graph/DirectorPanel";
+import { AgentAccess } from "@/components/graph/AgentAccess";
+import { VersionTimeline } from "@/components/graph/VersionTimeline";
 import { PROJECT_STATUS_STYLE } from "@/lib/labelStyle";
 import { shortDate } from "@/lib/format";
 import type { ProjectDetail } from "@/lib/queries";
@@ -28,7 +33,7 @@ import { PlanPanel } from "./PlanPanel";
 import { ReviewPanel } from "./ReviewPanel";
 import { Room } from "./Room";
 
-type Tab = "brief" | "footage" | "plan" | "cutlist" | "review";
+type Tab = "brief" | "footage" | "plan" | "cutlist" | "review" | "history";
 
 export function ProjectView({ initial }: { initial: ProjectDetail }) {
   const router = useRouter();
@@ -52,6 +57,21 @@ export function ProjectView({ initial }: { initial: ProjectDetail }) {
   );
   const overdue =
     project.due_at && project.due_at < Date.now() && project.status !== "delivered";
+  const proposedCount = state.recommendations.filter(
+    (r) => r.status === "proposed" || r.status === "modified" || r.status === "needs_review",
+  ).length;
+  // Anything the "State of the edit" block should refetch on.
+  const editStateKey = [
+    labels.length,
+    labels.filter((l) => l.status === "done").length,
+    openCount,
+    state.recommendations.length,
+    proposedCount,
+    state.recommendations.filter((r) => r.status === "approved").length,
+    state.messages.length,
+    state.versions.length,
+    project.owner_state,
+  ].join(":");
 
   async function setStatus(next: ProjectStatus) {
     try {
@@ -133,6 +153,18 @@ export function ProjectView({ initial }: { initial: ProjectDetail }) {
                   {project.summary}
                 </p>
               ) : null}
+
+              {/* Who holds the edit right now. Always visible, whatever the mode. */}
+              <OwnerState
+                className="mt-4"
+                projectId={project.id}
+                value={project.owner_state}
+                canChange={capabilities.canLabel}
+                onChanged={() => {
+                  refresh();
+                  router.refresh();
+                }}
+              />
             </div>
 
             <div className="flex items-center gap-2 shrink-0">
@@ -232,9 +264,10 @@ export function ProjectView({ initial }: { initial: ProjectDetail }) {
               options={[
                 { value: "brief", label: <><ClipboardList size={13} /> Brief</> },
                 { value: "footage", label: <><Film size={13} /> Footage</>, count: videos.length },
-                { value: "plan", label: <><Wand2 size={13} /> Plan</> },
+                { value: "plan", label: <><Wand2 size={13} /> Plan</>, count: proposedCount },
                 { value: "cutlist", label: <><ListChecks size={13} /> Cut list</>, count: openCount },
                 { value: "review", label: <><Sparkles size={13} /> Review</> },
+                { value: "history", label: <><History size={13} /> History</>, count: state.versions.length },
               ]}
             />
           </div>
@@ -247,6 +280,8 @@ export function ProjectView({ initial }: { initial: ProjectDetail }) {
               projectId={project.id}
               initial={brief.payload}
               canEdit={capabilities.canEditBrief}
+              template={state.template}
+              projectName={project.name}
             />
           ) : null}
 
@@ -263,6 +298,19 @@ export function ProjectView({ initial }: { initial: ProjectDetail }) {
           ) : null}
 
           {tab === "plan" ? (
+            <div className="space-y-4">
+              <DirectorPanel
+                projectId={project.id}
+                recommendations={state.recommendations}
+                aiAvailable={state.ai.llm}
+                analysedCount={state.analyses.filter((a) => a.status === "done").length}
+                canRun={capabilities.canRunAi}
+                canDecide={capabilities.canEditBrief}
+                onChanged={() => {
+                  refresh();
+                  router.refresh();
+                }}
+              />
             <PlanPanel
               projectId={project.id}
               videos={videos}
@@ -270,11 +318,14 @@ export function ProjectView({ initial }: { initial: ProjectDetail }) {
               referenceVideoId={project.reference_video_id}
               aiAvailable={state.ai.llm}
               canRun={capabilities.canRunAi}
+              canDecide={capabilities.canEditBrief}
+              recommendations={state.recommendations}
               onChanged={() => {
                 refresh();
                 router.refresh();
               }}
             />
+            </div>
           ) : null}
 
           {tab === "cutlist" ? (
@@ -304,7 +355,28 @@ export function ProjectView({ initial }: { initial: ProjectDetail }) {
               canRun={capabilities.canRunAi}
               hasLlm={state.ai.llm}
               onChanged={refresh}
+              onNavigate={setTab}
+              stateKey={editStateKey}
             />
+          ) : null}
+
+          {tab === "history" ? (
+            <div className="space-y-4">
+            <VersionTimeline
+              projectId={project.id}
+              versions={state.versions}
+              recommendations={state.recommendations}
+              labels={labels}
+              videos={videos}
+              canApprove={capabilities.canEditBrief}
+              canRecord={capabilities.canLabel}
+              onChanged={() => {
+                refresh();
+                router.refresh();
+              }}
+            />
+            <AgentAccess projectId={project.id} canManage={capabilities.canEditBrief} />
+            </div>
           ) : null}
         </div>
       </div>

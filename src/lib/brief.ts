@@ -24,6 +24,11 @@ export interface BriefSection {
   title: string;
   blurb: string;
   fields: BriefField[];
+  /**
+   * Left out of the completeness meter. The meter answers "can the editor
+   * start", and a style preference is not something an editor is blocked on.
+   */
+  optional?: boolean;
 }
 
 export const BRIEF_SECTIONS: BriefSection[] = [
@@ -121,6 +126,101 @@ export const BRIEF_SECTIONS: BriefSection[] = [
         kind: "textarea",
         hint: "Links or channel names whose style you want matched.",
         placeholder: "https://youtu.be/…, I want the b-roll rhythm from this",
+      },
+    ],
+  },
+  {
+    id: "style",
+    title: "Style",
+    blurb:
+      "The look and rhythm your edits share. This is what a template saves, and what the AI director measures the footage against.",
+    optional: true,
+    fields: [
+      {
+        key: "category",
+        label: "Content category",
+        kind: "select",
+        options: [
+          "Gym edit",
+          "Aesthetic reel",
+          "Surreal edit",
+          "Mini vlog",
+          "Talking head",
+          "Fashion",
+          "Travel",
+          "Food",
+          "Other",
+        ],
+      },
+      {
+        key: "hookStructure",
+        label: "Hook structure",
+        kind: "select",
+        options: [
+          "Strongest visual first",
+          "Question or bold claim first",
+          "Result first, then the process",
+          "Cold open into the action",
+          "Text hook over the first shot",
+        ],
+      },
+      {
+        key: "shotDuration",
+        label: "Preferred shot length",
+        kind: "select",
+        options: [
+          "0.5 to 1.5s, rapid",
+          "1 to 2.5s, fast",
+          "2 to 5s, steady",
+          "Mixed, follow the music",
+        ],
+      },
+      {
+        key: "transitions",
+        label: "Transitions",
+        kind: "select",
+        options: [
+          "Hard cuts only",
+          "Cuts plus the odd match cut",
+          "Whips and speed ramps welcome",
+          "Anything, as long as it lands on the beat",
+        ],
+      },
+      {
+        key: "textPlacement",
+        label: "Text placement",
+        kind: "select",
+        options: [
+          "Top third",
+          "Centre",
+          "Lower third, above the caption area",
+          "Minimal or none",
+        ],
+      },
+      {
+        key: "visualStyle",
+        label: "Visual style",
+        kind: "textarea",
+        placeholder: "Grainy, high contrast, handheld, natural light only",
+      },
+      {
+        key: "colourDirection",
+        label: "Colour direction",
+        kind: "text",
+        placeholder: "Warm, lifted blacks, teal in the shadows",
+      },
+      {
+        key: "editingRules",
+        label: "Editing rules",
+        kind: "textarea",
+        hint: "One per line. The AI treats these as guardrails and checks the footage against them.",
+        placeholder: "Never hold a shot over 2 seconds in the first 5\nCut on the downbeat, not just near it",
+      },
+      {
+        key: "aiInstructions",
+        label: "Instructions to the AI",
+        kind: "textarea",
+        placeholder: "Prefer punch-ins over transitions. Flag anything that reads like an advert.",
       },
     ],
   },
@@ -227,6 +327,15 @@ export const BRIEF_SECTIONS: BriefSection[] = [
 
 export const BRIEF_FIELDS: BriefField[] = BRIEF_SECTIONS.flatMap((s) => s.fields);
 
+/** The fields the completeness meter counts: everything outside optional sections. */
+const SCORED_FIELDS: BriefField[] = BRIEF_SECTIONS.filter((s) => !s.optional).flatMap(
+  (s) => s.fields,
+);
+
+/** The style fields on their own, which is what a template is made of. */
+export const STYLE_FIELDS: BriefField[] =
+  BRIEF_SECTIONS.find((s) => s.id === "style")?.fields ?? [];
+
 export type BriefValues = Record<string, string | string[]>;
 
 function isFilled(value: string | string[] | undefined): boolean {
@@ -241,7 +350,7 @@ function isFilled(value: string | string[] | undefined): boolean {
 export function completeness(values: BriefValues): number {
   let earned = 0;
   let total = 0;
-  for (const field of BRIEF_FIELDS) {
+  for (const field of SCORED_FIELDS) {
     const weight = field.required ? 2 : 1;
     total += weight;
     if (isFilled(values[field.key])) earned += weight;
@@ -250,7 +359,7 @@ export function completeness(values: BriefValues): number {
 }
 
 export function missingRequired(values: BriefValues): BriefField[] {
-  return BRIEF_FIELDS.filter((f) => f.required && !isFilled(values[f.key]));
+  return SCORED_FIELDS.filter((f) => f.required && !isFilled(values[f.key]));
 }
 
 /** Strips unknown keys so a crafted payload can't smuggle data into the AI prompt. */
@@ -278,6 +387,40 @@ export function sanitiseBrief(input: unknown): BriefValues {
     }
   }
   return out;
+}
+
+/** One line per rule, from the fields that hold rules. What the AI is checked against. */
+export function guardrailsOf(values: BriefValues): string[] {
+  const out: string[] = [];
+  for (const key of ["doNots", "editingRules", "sensitive"]) {
+    const value = values[key];
+    if (typeof value !== "string") continue;
+    for (const line of value.split(/\r?\n/)) {
+      const rule = line.replace(/^[-*\u2022]\s*/, "").trim();
+      if (rule) out.push(rule);
+    }
+  }
+  return out;
+}
+
+/** The niche preset that matches a content category, for the planner. */
+export function nicheForCategory(category: string | undefined): string {
+  switch (category) {
+    case "Gym edit":
+      return "gym";
+    case "Aesthetic reel":
+    case "Fashion":
+    case "Travel":
+    case "Food":
+      return "aesthetic";
+    case "Surreal edit":
+      return "surreal";
+    case "Mini vlog":
+    case "Talking head":
+      return "vlog";
+    default:
+      return "general";
+  }
 }
 
 /** Compact, human-readable version for prompts; skips empty fields. */

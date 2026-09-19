@@ -16,6 +16,9 @@ import { resolveStt } from "./ai/stt";
 import { getSetting } from "./ai/keys";
 import { ffmpegStatus } from "./analysis/ffmpeg";
 import { listAnalyses, type AnalysisView } from "./analysis/store";
+import { listRecommendations, type Recommendation } from "./graph/recommendations";
+import { listProjectVersions, type ProjectVersionView } from "./graph/versions";
+import { getTemplateVersion } from "./templates/store";
 import { reelView } from "./reel/store";
 import type { ReelView } from "./reel/types";
 
@@ -62,6 +65,12 @@ export interface ProjectDetail {
   ffmpeg: boolean;
   /** One-person workspace: no room, no presence. */
   solo: boolean;
+  /** What the AI has proposed and not yet been decided on or replaced. */
+  recommendations: Recommendation[];
+  /** V1 AI draft, V2 human edit, and so on. */
+  versions: ProjectVersionView[];
+  /** The template this project came from, as a name and a version number. */
+  template: { id: string; name: string; version: number } | null;
 }
 
 export function listVideos(ctx: Ctx, projectId: string): Video[] {
@@ -231,6 +240,23 @@ export function loadProjectDetail(ctx: Ctx, project: Project): ProjectDetail {
     reel: reelView(ctx, project.id),
     ffmpeg: ffmpegStatus().ok,
     solo: getSetting(ctx.workspace.id, "SOLO_MODE") === "on",
+    recommendations: listRecommendations(ctx, project.id, { live: true }),
+    versions: listProjectVersions(ctx, project.id),
+    template: templateSummary(ctx, project.template_version_id),
+  };
+}
+
+function templateSummary(
+  ctx: Ctx,
+  versionId: string | null,
+): { id: string; name: string; version: number } | null {
+  if (!versionId) return null;
+  const found = getTemplateVersion(ctx, versionId);
+  if (!found) return null;
+  return {
+    id: found.version.template_id,
+    name: found.template?.name ?? "Deleted template",
+    version: found.version.version,
   };
 }
 

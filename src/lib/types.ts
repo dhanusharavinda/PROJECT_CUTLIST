@@ -43,11 +43,31 @@ export interface Project {
   music_note: string;
   /** Bumped on every reel change, and printed in the handoff filename. */
   packet_rev: number;
+  /** The template this project was created from, and the exact version. */
+  template_id: string | null;
+  template_version_id: string | null;
+  /** Who holds the edit right now. See OWNER_STATES. */
+  owner_state: OwnerState;
   due_at: number | null;
   created_by: string;
   created_at: number;
   updated_at: number;
 }
+
+/**
+ * The edit moves between the creator, an AI agent and a human editor and back.
+ * Whoever holds it is the only one expected to be changing it.
+ */
+export const OWNER_STATES = [
+  "awaiting_creator",
+  "ready_for_ai",
+  "ai_executing",
+  "ready_for_human",
+  "human_editing",
+  "ready_for_review",
+] as const;
+
+export type OwnerState = (typeof OWNER_STATES)[number];
 
 export interface Video {
   id: string;
@@ -151,8 +171,8 @@ export interface Label {
   status: "open" | "doing" | "done" | "skipped";
   confidence: number;
   origin: "ai" | "manual" | "heuristic";
-  /** A voice note, or the footage analysis. */
-  source: "note" | "analysis";
+  /** A voice note, the footage analysis, or an AI recommendation the creator accepted. */
+  source: "note" | "analysis" | "recommendation";
   assignee_id: string | null;
   created_at: number;
   updated_at: number;

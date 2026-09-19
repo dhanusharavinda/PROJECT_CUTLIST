@@ -18,6 +18,7 @@ import {
 } from "@/lib/analysis/store";
 import { NICHE_IDS } from "@/lib/analysis/presets";
 import type { NicheId } from "@/lib/analysis/types";
+import { proposeFromPlan } from "@/lib/graph/recommendations";
 
 type Params = { params: Promise<{ videoId: string }> };
 
@@ -149,6 +150,14 @@ export const POST = route(async (req, { params }: Params) => {
     });
   }
 
+  // The plan is also written as recommendations: rows the creator can approve,
+  // reject, change or turn into instructions, with a history that survives the
+  // next regeneration. The plan payload stays for the panel that renders it.
+  const recommendations = proposeFromPlan(ctx, project.id, video.id, saved.payload ?? local, {
+    source: saved.origin === "ai" ? saved.model : "local",
+    durationMs: analysis.payload.duration_ms,
+  });
+
   emit(
     ctx.workspace.id,
     { type: "suggestion", projectId: project.id, payload: { videoId: video.id } },
@@ -159,5 +168,5 @@ export const POST = route(async (req, { params }: Params) => {
     },
   );
 
-  return json({ plan: saved, warning, aiAvailable: hasLlm(ctx.workspace.id) });
+  return json({ plan: saved, recommendations, warning, aiAvailable: hasLlm(ctx.workspace.id) });
 });

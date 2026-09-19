@@ -4,6 +4,9 @@ import { many, now, run } from "@/lib/db";
 import { assert, can, getProject, getVideo, requireCtx } from "@/lib/tenancy";
 import { logActivity } from "@/lib/activity";
 import { loadProjectDetail } from "@/lib/queries";
+import { OWNER_STATES } from "@/lib/types";
+import { recordEvent } from "@/lib/graph/events";
+import { emit } from "@/lib/activity";
 import { removeByPrefix, removeKey, removeTree } from "@/lib/storage";
 
 type Params = { params: Promise<{ projectId: string }> };
@@ -23,6 +26,9 @@ const Patch = z.object({
   dueAt: z.number().int().nullable().optional(),
   niche: z.enum(["gym", "aesthetic", "surreal", "vlog", "general"]).optional(),
   referenceVideoId: z.string().min(1).nullable().optional(),
+  ownerState: z.enum(OWNER_STATES).optional(),
+  musicNote: z.string().trim().max(400).optional(),
+  footageUrl: z.string().trim().url().nullable().optional(),
 });
 
 export const PATCH = route(async (req, { params }: Params) => {
@@ -49,6 +55,9 @@ export const PATCH = route(async (req, { params }: Params) => {
             status = COALESCE(?, status),
             niche = COALESCE(?, niche),
             reference_video_id = CASE WHEN ? THEN ? ELSE reference_video_id END,
+            owner_state = COALESCE(?, owner_state),
+            music_note = COALESCE(?, music_note),
+            footage_url = CASE WHEN ? THEN ? ELSE footage_url END,
             due_at = CASE WHEN ? THEN ? ELSE due_at END,
             updated_at = ?
       WHERE id = ? AND workspace_id = ?`,
@@ -58,12 +67,33 @@ export const PATCH = route(async (req, { params }: Params) => {
     input.niche ?? null,
     input.referenceVideoId !== undefined ? 1 : 0,
     input.referenceVideoId ?? null,
+    input.ownerState ?? null,
+    input.musicNote ?? null,
+    input.footageUrl !== undefined ? 1 : 0,
+    input.footageUrl ?? null,
     input.dueAt !== undefined ? 1 : 0,
     input.dueAt ?? null,
     now(),
     projectId,
     ctx.workspace.id,
   );
+
+  // Handing the edit to someone is a moment worth remembering by itself.
+  if (input.ownerState && input.ownerState !== project.owner_state) {
+    recordEvent(ctx, projectId, {
+      kind: "owner.changed",
+      payload: { from: project.owner_state, to: input.ownerState },
+    });
+    emit(
+      ctx.workspace.id,
+      { type: "graph", projectId, payload: { owner_state: input.ownerState } },
+      {
+        actorId: ctx.user.id,
+        verb: "owner.changed",
+        summary: `${project.name}: ${input.ownerState.replace(/_/g, " ")}`,
+      },
+    );
+  }
 
   if (input.status && input.status !== project.status) {
     logActivity({

@@ -52,6 +52,11 @@ does the cutting. That is exactly what this produces: a document, not an edit.
 | **Client isolation** | Separate clients live in separate workspaces, with their own members, footage, cut lists and API keys. Nothing crosses. |
 | **Your keys, your bill** | STT and LLM keys are added *in the app*, encrypted at rest, scoped to one workspace. |
 | **Export** | The cut list leaves as Markdown, CSV or JSON. It is not trapped in here. |
+| **Templates with versions** | Save a brief as a template. Every edit is a new version; a project stays pinned to the version it started from. Paste a reel link and its style becomes a template. |
+| **A creative director that only proposes** | One pass reads the brief, the rules, every shot, the transcript and what you already decided, then suggests. You approve, change, reject or ask why. Nothing reaches the cut list until you convert it. |
+| **"Ask AI to revise"** | Type "faster middle, leave the hook alone". The request becomes a scope, only that part is opened up, and what you locked or approved is kept. |
+| **Versions and ownership** | V1 AI draft, V2 human edit, V3 creator revision. Who holds the edit is always stated. Every version says what changed, or says "unknown" instead of guessing. |
+| **Read-only door for outside AI** | ChatGPT, Astra or any MCP client can read one project with a token you can revoke. It can never write. |
 
 Cutlist is **fully usable with no API keys at all**. Recordings are stored, and
 an offline keyword-rules labeller extracts instructions so you can see the shape
@@ -266,6 +271,158 @@ analysis and the cut list stay.
 
 ---
 
+## The creative control plane
+
+Cutlist is the place the creative state lives. Humans and AI both read from it
+and propose to it; neither owns it. The loop is:
+
+```
+creator writes the brief (or starts from a template)
+   -> footage is measured, shots get metadata
+   -> the AI director proposes           (recommendations, status: proposed)
+   -> the creator decides                (approved / rejected / changed / needs review)
+   -> approved suggestions become instructions on the cut list
+   -> a human editor or an AI agent executes, outside Cutlist
+   -> the result comes back as a version (V2 human edit)
+   -> the creator asks for a revision     ("Ask AI to revise", scoped)
+```
+
+### Templates
+
+**Templates** in the sidebar. A template is a brief without the deadline and
+the project notes, plus the niche and the music note. Save one from any
+project's Brief tab ("Save as template"), or apply one there ("Apply a
+template", which fills only the blanks). Editing a template writes a new
+version; projects keep the version they were born from, and the Brief tab says
+"Started from Gym edit v2".
+
+The brief has a **style** section for templates: category, hook structure, shot
+duration, transitions, text placement, visual style, colour direction, editing
+rules the AI must respect, and free instructions for the AI. None of it counts
+against brief completeness.
+
+**From a reel link.** Footage tab, "Add a link", first tab. Paste an Instagram,
+TikTok or YouTube link, bring it in as a reference, analyse it, then "Save its
+style as a template" on the Plan tab. The rhythm is measured (median hold, cuts
+a minute, how much lands on the beat) and, with an AI key, the look is read from
+the frames (visual style, colour, hook structure, text placement, rules). This
+needs **yt-dlp** on your machine (`pip install yt-dlp`, or set `YTDLP_PATH`).
+Cutlist never bundles it. Use it for your own posts and reels you have the right
+to study.
+
+### Footage intelligence
+
+Every analysed shot carries structured metadata: timing, camera movement
+(static, pan, handheld, zoom), composition, brightness and saturation, a hook
+score for how well it opens, whether it repeats an earlier shot, whether it is
+weak, and whether it would serve as b-roll. "Read shots with AI" on the Plan
+tab adds subject, framing, face visibility and quality from the frames, on the
+cheap tier. The Plan tab shows the strongest openers, the weak shots, the
+repeats and the b-roll candidates, each a click from the frame.
+
+### The director and its recommendations
+
+Plan tab, top panel. **Run the director** sends the whole project to the model:
+brief, template, rules, every measured shot, the transcript, voice notes, the
+current reel order, what is already on the cut list, what you decided about
+earlier suggestions, and a handful of stills. It answers with recommendations:
+type (hook, order, remove, pacing, narrative, inconsistency, missing, conflict,
+or any cut list type), a timestamp that must come from the data, what to do,
+why, a confidence, a priority and a scope (hook, body, close, audio, text,
+whole).
+
+Each row can be **approved**, **rejected** (with a reason; it will not be
+proposed again), **changed** (a new row supersedes the old one; the old one is
+kept), parked as **needs review**, **explained** (a fresh answer from the model
+about that one suggestion), or **made an instruction** on the cut list. The
+director never modifies the cut list, never overwrites a decision, and only
+supersedes rows still marked proposed.
+
+**Ask AI to revise.** One sentence. The fast tier turns it into a scope (what
+may change, what is locked), then the deep tier re-runs the director inside
+that scope. The lock is named to the model and enforced on the way out, so
+"leave the hook alone" cannot be lost to a good idea. The result is recorded as
+an AI revision with the scope on it.
+
+### Versions, ownership and review
+
+**History** tab. A version is a snapshot with a kind (AI draft, human edit,
+creator revision, AI revision, human final), an approval (pending, approved,
+changes requested), a summary and a list of what changed. Recording a version
+diffs its reel against the previous one and writes the delta: added, removed,
+reordered, shortened, lengthened, runtime. Where it cannot tell, it writes
+"unknown" rather than inventing a change.
+
+**Who holds the edit** sits under the project title: awaiting creator, ready
+for AI, AI executing, ready for human, human editing, ready for review. The
+director sets AI executing while it runs and hands back to the creator when it
+finishes, even if it fails.
+
+The **Review** tab opens with the state of the edit: completed, unresolved,
+conflict, missing, needs creator, needs editor, AI suggestion, each with a
+count and a jump to where it lives.
+
+### The EditGraph
+
+Everything above is one object: `GET /api/projects/<id>/graph`. Project, brief,
+template at its pinned version, rules, media manifest, shots with metadata,
+transcripts, instructions, voice notes, recommendations, reel, versions, open
+questions, the event log and an unresolved summary. It is a projection built
+from the tables on every read, so it can never drift from them. Every change
+also lands as an append-only row in `project_events`.
+
+`GET /api/projects/<id>/export?format=package` is the same thing as a file, the
+**AI project package**: everything an outside agent needs, no video bytes, with
+links to the footage instead.
+
+### Letting an outside AI read a project
+
+History tab, bottom panel, **New token**. Paste the token and the MCP URL into
+ChatGPT (a connector), Astra, or any client that speaks MCP over streamable
+HTTP. The agent gets thirteen tools, all reads: project, brief, template,
+template version, media manifest, shot analysis, representative frames,
+transcript, creator instructions, AI recommendations, edit graph, current
+revision, unresolved items. One token reads one project. Only a hash is stored;
+revoke it and the door closes.
+
+The server is `POST /api/mcp`; `GET /api/mcp` returns the server card. It must
+be reachable from the internet for a hosted agent to use it, and this app runs
+on `localhost` until you deploy it or tunnel it:
+
+```bash
+# quickest: a tunnel while the dev server runs
+npx cloudflared tunnel --url http://localhost:3000
+# then set APP_URL to the https URL it prints so new tokens show the right MCP URL
+```
+
+Deploying the app (see Production below) is the durable answer.
+
+### Where the edit gets executed
+
+Cutlist never edits video. Execution goes through a **connector** that declares
+what it can do. `GET /api/connectors` lists them. Today the one wired connector
+is **file handoff**: the packet, EDL, Markdown, CSV, JSON and the AI package
+out, and `sync` back in, which records what a tool did as a version. CapCut,
+Premiere, Resolve, Final Cut and a generation service are declared with their
+capabilities and marked not configured, so the capability map tells the truth.
+Asking a connector for something it cannot do answers `501` with its capability
+list, and the UI degrades to what is declared.
+
+Footage lives behind a **media provider** the same way: Google Drive, this
+machine, or a direct link, each with its capabilities. Drive is recommended and
+remains one connector among several.
+
+### Model tiers and cost
+
+Three tiers, routed by task, not one global model: **fast** for labelling
+notes, explaining a suggestion, scoping a revision and reading frames;
+**standard** for the director; **deep** for revisions and the full review.
+Set each in **Settings, AI providers**. Every model call is logged to
+`ai_runs` with its prompt, input, output, tier and token counts, so any
+recommendation can be traced to the exact call that produced it.
+
+---
+
 ## Adding AI
 
 None of this is required, but the product is much better with it.
@@ -286,16 +443,18 @@ and is readable only by the workspace it was added to. Anything set in
 
 **Language model**, one of:
 
-| Provider | Key | Default model |
+| Provider | Key | Fast / standard / deep |
 |---|---|---|
-| Anthropic | `ANTHROPIC_API_KEY` | `claude-opus-5` |
-| OpenAI | `OPENAI_API_KEY` | `gpt-4o-mini` |
+| OpenAI (recommended) | `OPENAI_API_KEY` | `gpt-4.1-mini` / `gpt-4.1` / `gpt-4.1` (set an o-series model as deep for revisions) |
+| Anthropic | `ANTHROPIC_API_KEY` | `claude-haiku-4-5-20251001` / `claude-sonnet-5` / `claude-opus-5` |
 | Google Gemini | `GOOGLE_AI_API_KEY` | `gemini-2.0-flash` |
-| Groq | `GROQ_API_KEY` | `llama-3.3-70b-versatile` |
-| OpenRouter | `OPENROUTER_API_KEY` | set the model yourself |
+| Groq | `GROQ_API_KEY` | `llama-3.1-8b-instant` / `llama-3.3-70b-versatile` |
+| OpenRouter | `OPENROUTER_API_KEY` | set the model ids yourself |
 
-Leave "Preferred provider" on **Auto** and Cutlist uses the first one that has a
-key. Override the model per workspace in the same panel.
+Leave "Preferred provider" on **Auto** and Cutlist uses the first one in that
+order that has a key. Override the standard, fast and deep models per workspace
+in the same panel. Vision (reading frames, the director's stills) needs OpenAI,
+Anthropic or Gemini.
 
 Without a speech-to-text key, recordings are still saved. You can type the
 transcript yourself and the labeller runs on that. Without a language-model key,
@@ -429,17 +588,22 @@ src/
       page.tsx                     dashboard
       loading.tsx                  skeleton shaped like the dashboard
       error.tsx / not-found.tsx    failures that keep the sidebar
-      settings/                    AI keys, Drive, people
-      projects/[id]/               brief · footage · plan · cut list · review + room
+      settings/                    AI keys and model tiers, Drive, people
+      templates/                   the template library and the versioned editor
+      projects/[id]/               brief · footage · plan · cut list · review · history + room
       library/                     every clip in the workspace, by tag
       projects/[id]/walkthrough/[v]/ reference player · markers · recorder · notes
     api/                         route handlers
+      mcp/                         the read-only MCP server (bearer project tokens)
+      connectors/                  capability discovery for editors and media providers
   components/
     ui.tsx                       design-system primitives
     AppShell.tsx                 sidebar, workspace switcher, skip link
     Fallback.tsx                 shared shape for every dead end
     EmptyArt.tsx                 line art for the empty states
-    project/                     brief, footage, cut list, review, room
+    project/                     brief, footage, plan, cut list, review, room
+    graph/                       director, recommendation rows, ownership, history, agent access
+    templates/                   library, editor, picker
     walkthrough/                 marker track, recorder, notes panel
   lib/
     schema.ts                    the single source of truth for the DDL
@@ -448,8 +612,14 @@ src/
     crypto.ts                    scrypt passwords, AES-256-GCM secrets
     brief.ts                     brief fields, declared once, used everywhere
     pipeline.ts                  voice note → transcript → cut list
-    ai/                          stt.ts, llm.ts, labeler.ts, suggest.ts, keys.ts
-    analysis/                    ffmpeg, scene + beat detection, planner, vision
+    ai/                          stt.ts, llm.ts (tiers + ai_runs log), labeler.ts, suggest.ts, keys.ts
+    analysis/                    ffmpeg, scene + beat detection, planner, vision, intel.ts, enrich.ts
+    director/                    run.ts (the director), revise.ts (scoped revision)
+    graph/                       build.ts (EditGraph), recommendations, versions, diff, events, tokens
+    templates/                   store.ts (versioned templates), style.ts (style read off a reel)
+    connectors/                  EditorConnector interface, registry, file handoff
+    media/provider.ts            MediaProvider interface: Drive, local, link
+    media/fetch.ts               a reel by link, through your own yt-dlp
     media/localize.ts            Drive to disk, preview copies, the import queue
     reel/time.ts                 when an instruction counts as "now", reel maths
     reel/store.ts                the ordered slots, and which instruction lands in which
@@ -534,6 +704,17 @@ file locked. Stop the server first.
   work on phone footage. The original stays untouched and is what the analyser
   measures.
 - **No email.** Invites are links you send yourself.
+- **NLE connectors are declared, not wired.** CapCut, Premiere, Resolve and
+  Final Cut appear in the capability map as not configured. Today execution is
+  by file handoff or by an agent that reads the MCP server and drives its own
+  editor. Their results come back as versions.
+- **The MCP server is only useful when reachable.** On `localhost` a hosted
+  agent cannot see it; deploy or tunnel first.
+- **Reel links need yt-dlp** installed by you. Private accounts, age gates and
+  removed posts fail with the platform's reason.
+- **The conflict detector is a heuristic.** It flags an instruction that
+  contradicts a written rule by keyword and can misfire; it is a prompt to
+  look, not a verdict.
 - **Drive scope is sensitive.** `drive.readonly` requires Google verification
   before a public app can use it. For your own account or listed test users it
   works immediately.
@@ -557,3 +738,9 @@ file locked. Stop the server first.
   app commits.
 - Rotating `APP_ENCRYPTION_KEY` makes previously stored keys unreadable; users
   re-enter them.
+- Project access tokens are shown once and stored as SHA-256 hashes. A token
+  reads one project as a viewer and nothing else; the MCP server has no write
+  path at all.
+- Every model call (prompt, input, output) is logged to `ai_runs` inside the
+  workspace that made it. Nothing leaves the workspace except to the provider
+  you chose.

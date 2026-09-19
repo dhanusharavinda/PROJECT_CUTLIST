@@ -8,6 +8,7 @@ import {
   Check,
   ChevronsUpDown,
   LayoutGrid,
+  LayoutTemplate,
   Library,
   LogOut,
   Menu,
@@ -257,6 +258,13 @@ function SidebarBody({
           Overview
         </NavLink>
         <NavLink
+          href="/app/templates"
+          icon={<LayoutTemplate size={15} />}
+          active={pathname.startsWith("/app/templates")}
+        >
+          Templates
+        </NavLink>
+        <NavLink
           href="/app/library"
           icon={<Library size={15} />}
           active={pathname.startsWith("/app/library")}
@@ -357,6 +365,7 @@ function SidebarBody({
 function sectionFor(pathname: string, projects: Props["projects"]): string {
   if (pathname.startsWith("/app/settings")) return "Settings";
   if (pathname.startsWith("/app/library")) return "Clip library";
+  if (pathname.startsWith("/app/templates")) return "Templates";
   const match = pathname.match(/^\/app\/projects\/([^/]+)/);
   if (match) return projects.find((p) => p.id === match[1])?.name ?? "Project";
   return "Overview";

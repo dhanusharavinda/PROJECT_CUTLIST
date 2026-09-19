@@ -8,6 +8,7 @@ export type BusEvent =
   | { type: "brief"; projectId: string; payload: unknown }
   | { type: "suggestion"; projectId: string; payload: unknown }
   | { type: "reel"; projectId: string; payload: unknown }
+  | { type: "graph"; projectId: string; payload: unknown }
   | { type: "presence"; projectId: string; payload: unknown };
 
 /**

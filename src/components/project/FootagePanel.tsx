@@ -291,15 +291,40 @@ function LinkModal({
   const [url, setUrl] = useState("");
   const [title, setTitle] = useState("");
   const [busy, setBusy] = useState(false);
+  const [mode, setMode] = useState<"file" | "reel">("reel");
+  const [role, setRole] = useState<"reference" | "footage">("reference");
+  const [fetcher, setFetcher] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    if (!open || fetcher !== null) return;
+    api<{ available: boolean }>(`/api/projects/${projectId}/videos/from-link`)
+      .then((res) => setFetcher(res.available))
+      .catch(() => setFetcher(false));
+  }, [open, fetcher, projectId]);
+
+  const looksLikeReel = /instagram\.com|tiktok\.com|youtube\.com|youtu\.be/i.test(url);
 
   async function submit(event: React.FormEvent) {
     event.preventDefault();
     setBusy(true);
     try {
-      await api(`/api/projects/${projectId}/videos`, {
-        method: "POST",
-        json: { title: title || url.split("/").pop() || "Clip", source: "link", externalUrl: url },
-      });
+      if (mode === "reel") {
+        await api(`/api/projects/${projectId}/videos/from-link`, {
+          method: "POST",
+          json: { url, role, title: title || undefined },
+        });
+        toast(
+          role === "reference"
+            ? "Reel fetched as a reference. Analyse it in Plan, then save its style as a template."
+            : "Reel fetched into the footage.",
+          "ok",
+        );
+      } else {
+        await api(`/api/projects/${projectId}/videos`, {
+          method: "POST",
+          json: { title: title || url.split("/").pop() || "Clip", source: "link", externalUrl: url },
+        });
+      }
       setUrl("");
       setTitle("");
       onClose();
@@ -315,22 +340,71 @@ function LinkModal({
     <Modal
       open={open}
       onClose={onClose}
-      title="Add a clip by URL"
-      description="A direct link to a video file. The browser plays it in place, so the source must allow cross-origin playback."
+      title={mode === "reel" ? "Paste a reel link" : "Add a clip by URL"}
+      description={
+        mode === "reel"
+          ? "An Instagram, TikTok or YouTube link. The reel is fetched onto this machine so it can be analysed and its style read into a template. Use it for your own posts and reels you have the right to study."
+          : "A direct link to a video file. The browser plays it in place, so the source must allow cross-origin playback."
+      }
       width={470}
     >
       <form onSubmit={submit} className="space-y-4">
-        <Labeled label="Video URL" required>
+        <div className="flex gap-1 p-1 rounded-[10px] bg-white/[0.04] w-fit" role="tablist" aria-label="Kind of link">
+          {(
+            [
+              { id: "reel", label: "Instagram, TikTok, YouTube" },
+              { id: "file", label: "Direct video file" },
+            ] as const
+          ).map((option) => (
+            <button
+              key={option.id}
+              type="button"
+              role="tab"
+              aria-selected={mode === option.id}
+              onClick={() => setMode(option.id)}
+              className={
+                mode === option.id
+                  ? "text-[12px] px-3 py-1.5 rounded-[8px] bg-white/[0.08] text-chalk"
+                  : "text-[12px] px-3 py-1.5 rounded-[8px] text-mute hover:text-chalk-dim"
+              }
+            >
+              {option.label}
+            </button>
+          ))}
+        </div>
+
+        {mode === "reel" && fetcher === false ? (
+          <p className="text-[12px] text-warn leading-relaxed">
+            Fetching by link needs yt-dlp on this machine (pip install yt-dlp, or set YTDLP_PATH
+            in .env.local), then restart the server. Until then, download the reel yourself and
+            use Upload a clip.
+          </p>
+        ) : null}
+
+        <Labeled label={mode === "reel" ? "Reel link" : "Video URL"} required>
           <input
             autoFocus
             required
             type="url"
             className="field"
-            placeholder="https://cdn.example.com/ep42.mp4"
+            placeholder={mode === "reel" ? "https://www.instagram.com/reel/..." : "https://cdn.example.com/ep42.mp4"}
             value={url}
             onChange={(e) => setUrl(e.target.value)}
           />
         </Labeled>
+        {mode === "file" && looksLikeReel ? (
+          <p className="text-[12px] text-warn">
+            That looks like a social link, not a video file. Switch to the first tab to fetch it.
+          </p>
+        ) : null}
+        {mode === "reel" ? (
+          <Labeled label="Bring it in as" hint="A reference is studied, not cut. Footage goes on the reel.">
+            <select className="field cursor-pointer" value={role} onChange={(e) => setRole(e.target.value as typeof role)}>
+              <option value="reference">A reference reel to copy the style of</option>
+              <option value="footage">Footage for this reel</option>
+            </select>
+          </Labeled>
+        ) : null}
         <Labeled label="Title">
           <input
             className="field"
@@ -343,8 +417,8 @@ function LinkModal({
           <Button type="button" variant="quiet" onClick={onClose}>
             Cancel
           </Button>
-          <Button type="submit" variant="primary" loading={busy}>
-            Attach clip
+          <Button type="submit" variant="primary" loading={busy} disabled={mode === "reel" && fetcher === false}>
+            {mode === "reel" ? (busy ? "Fetching" : "Fetch reel") : "Attach clip"}
           </Button>
         </div>
       </form>

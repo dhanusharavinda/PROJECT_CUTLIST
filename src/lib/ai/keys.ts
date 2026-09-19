@@ -27,6 +27,8 @@ export const SETTING_KEYS = [
   "STT_MODEL",
   "LLM_PROVIDER",
   "LLM_MODEL",
+  "LLM_MODEL_FAST",
+  "LLM_MODEL_DEEP",
   "SOLO_MODE",
 ] as const;
 

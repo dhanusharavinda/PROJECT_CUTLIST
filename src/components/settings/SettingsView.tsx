@@ -34,6 +34,7 @@ interface ProviderMeta {
   label: string;
   secret: string;
   defaultModel: string;
+  tiers?: Record<string, string>;
   note: string;
 }
 
@@ -256,6 +257,7 @@ function AiSettings({
         activeLabel={active.llm ? `${active.llm.label} · ${active.llm.model}` : null}
         selectKey="LLM_PROVIDER"
         modelKey="LLM_MODEL"
+        tierKeys={{ fast: "LLM_MODEL_FAST", deep: "LLM_MODEL_DEEP" }}
         prefs={prefs}
         onPref={savePref}
         hintFor={hintFor}
@@ -278,6 +280,7 @@ function ProviderGroup({
   activeLabel,
   selectKey,
   modelKey,
+  tierKeys,
   prefs,
   onPref,
   hintFor,
@@ -295,6 +298,8 @@ function ProviderGroup({
   activeLabel: string | null;
   selectKey: string;
   modelKey: string;
+  /** Cheap and careful model overrides, when this group routes by task. */
+  tierKeys?: { fast: string; deep: string };
   prefs: Record<string, string>;
   onPref: (key: string, value: string) => void;
   hintFor: (key: string) => SecretHint | undefined;
@@ -372,6 +377,28 @@ function ProviderGroup({
             />
           </Labeled>
         </div>
+
+        {tierKeys ? (
+          <div className="grid sm:grid-cols-2 gap-4">
+            {(
+              [
+                { key: tierKeys.fast, tier: "fast", label: "Fast tier", hint: "Labelling notes, explaining a suggestion, reading frames. Cheap and quick." },
+                { key: tierKeys.deep, tier: "deep", label: "Deep tier", hint: "Revisions and the full review. The most careful model you are happy to pay for." },
+              ] as const
+            ).map((row) => {
+              const active = providers.find((p) => p.id === (prefs[selectKey] || activeId));
+              return (
+                <Labeled key={row.key} label={row.label} hint={row.hint}>
+                  <ModelInput
+                    value={prefs[row.key] ?? ""}
+                    placeholder={active?.tiers?.[row.tier] ?? active?.defaultModel ?? "provider default"}
+                    onCommit={(value) => onPref(row.key, value)}
+                  />
+                </Labeled>
+              );
+            })}
+          </div>
+        ) : null}
 
         <div className="rule-x" />
 

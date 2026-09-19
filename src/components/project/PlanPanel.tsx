@@ -9,7 +9,9 @@ import {
   Check,
   Clapperboard,
   Copy,
+  Eye,
   Gauge,
+  LayoutTemplate,
   ListPlus,
   Scan,
   Sparkles,
@@ -19,10 +21,12 @@ import {
 } from "lucide-react";
 import { Button, Chip, Empty, Meter, Panel, PanelHeader, Spinner, useToast } from "@/components/ui";
 import { FilmstripArt } from "@/components/EmptyArt";
+import { RecommendationRow } from "@/components/graph/RecommendationRow";
 import { timecode } from "@/lib/format";
 import { labelStyle } from "@/lib/labelStyle";
 import { NICHES } from "@/lib/analysis/presets";
-import type { AnalysisPayload, NicheId, PlanPayload } from "@/lib/analysis/types";
+import type { AnalysisPayload, NicheId, PlanPayload, Shot } from "@/lib/analysis/types";
+import type { Recommendation, RecommendationStatus } from "@/lib/graph/recommendations";
 import type { Video } from "@/lib/types";
 import { api } from "./useProject";
 
@@ -30,9 +34,39 @@ import { api } from "./useProject";
  * Footage analysis and the edit plan it produces.
  *
  * Nothing here touches the media. The analysis measures the clip, the plan
- * suggests what to do about it, and an item only becomes an instruction when
- * the creator accepts it into the cut list.
+ * suggests what to do about it, and a suggestion only becomes a creator
+ * instruction when the creator converts it onto the cut list.
+ *
+ * The plan's items live on as recommendation rows with a status of their own
+ * (proposed, approved, needs review, rejected, changed). The rows drive this
+ * panel; the plan payload is only shown on its own for plans made before rows
+ * existed.
  */
+
+/** The order the groups are read in. Rejected sits last and folded. */
+const GROUPS: { status: RecommendationStatus[]; title: string; hint: string; folded?: boolean }[] = [
+  {
+    status: ["proposed", "modified"],
+    title: "Proposed",
+    hint: "AI suggestions. Not on the cut list until you make them an instruction.",
+  },
+  {
+    status: ["approved"],
+    title: "Approved",
+    hint: "You said yes. Still a suggestion until it is made an instruction.",
+  },
+  {
+    status: ["needs_review"],
+    title: "Needs review",
+    hint: "Parked. Come back to these before handing the edit on.",
+  },
+  {
+    status: ["rejected"],
+    title: "Rejected",
+    hint: "The AI will not propose these again.",
+    folded: true,
+  },
+];
 
 interface AnalysisView {
   id: string;
@@ -77,6 +111,8 @@ export function PlanPanel({
   referenceVideoId,
   aiAvailable,
   canRun,
+  canDecide = canRun,
+  recommendations = [],
   onChanged,
 }: {
   projectId: string;
@@ -85,6 +121,10 @@ export function PlanPanel({
   referenceVideoId: string | null;
   aiAvailable: boolean;
   canRun: boolean;
+  /** Owners and creators decide on suggestions. Defaults to canRun. */
+  canDecide?: boolean;
+  /** Live recommendations for the whole project; filtered to the clip here. */
+  recommendations?: Recommendation[];
   onChanged: () => void;
 }) {
   const toast = useToast();
@@ -92,10 +132,16 @@ export function PlanPanel({
   const references = useMemo(() => videos.filter((v) => v.role === "reference"), [videos]);
 
   const [videoId, setVideoId] = useState<string>(footage[0]?.id ?? videos[0]?.id ?? "");
+  const recs = useMemo(
+    () => recommendations.filter((r) => r.video_id === videoId),
+    [recommendations, videoId],
+  );
   const [data, setData] = useState<AnalysisResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [planning, setPlanning] = useState(false);
   const [applying, setApplying] = useState(false);
+  const [enriching, setEnriching] = useState(false);
+  const [templating, setTemplating] = useState(false);
   const [picked, setPicked] = useState<Set<string>>(new Set());
   const [useAi, setUseAi] = useState(true);
   const poll = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -145,15 +191,50 @@ export function PlanPanel({
     }
   }
 
+  async function enrich() {
+    setEnriching(true);
+    try {
+      const res = await api<{ enriched: number; model: string }>(`/api/videos/${videoId}/analysis/enrich`, {
+        method: "POST",
+      });
+      await load();
+      toast(`${res.enriched} shots read by ${res.model}`, "ok");
+    } catch (err) {
+      toast((err as Error).message, "error");
+    } finally {
+      setEnriching(false);
+    }
+  }
+
+  async function saveStyleAsTemplate() {
+    if (!video) return;
+    setTemplating(true);
+    try {
+      const res = await api<{ template: { id: string; name: string }; profile: { measured: string[]; read: string[] } }>(
+        `/api/templates/from-reference`,
+        { method: "POST", json: { videoId: video.id } },
+      );
+      toast(`Saved as template "${res.template.name}". Find it under Templates.`, "ok");
+    } catch (err) {
+      toast((err as Error).message, "error");
+    } finally {
+      setTemplating(false);
+    }
+  }
+
   async function generate() {
     setPlanning(true);
     try {
-      const res = await api<{ plan: PlanView; warning: string | null }>(
-        `/api/videos/${videoId}/plan`,
-        { method: "POST", json: { niche, useAi } },
-      );
+      const res = await api<{
+        plan: PlanView;
+        recommendations?: Recommendation[];
+        warning: string | null;
+      }>(`/api/videos/${videoId}/plan`, { method: "POST", json: { niche, useAi } });
       setData((current) => (current ? { ...current, plan: res.plan } : current));
       setPicked(new Set());
+      // The plan is also written as recommendation rows; the project holds
+      // those, so refetch it rather than keeping a second copy here.
+      onChanged();
       if (res.warning) toast(res.warning, "info");
       else
         toast(
@@ -171,11 +252,28 @@ export function PlanPanel({
     if (picked.size === 0) return;
     setApplying(true);
     try {
-      const res = await api<{ added: number }>(`/api/videos/${videoId}/plan/apply`, {
-        method: "POST",
-        json: { itemIds: [...picked] },
-      });
-      toast(`${res.added} added to the cut list`, "ok");
+      if (recs.length > 0) {
+        // Recommendation mode: each picked row is converted on its own, so a
+        // failure on one does not silently drop the rest.
+        let added = 0;
+        const failed: string[] = [];
+        for (const recId of picked) {
+          try {
+            await api(`/api/recommendations/${recId}/convert`, { method: "POST" });
+            added += 1;
+          } catch (err) {
+            failed.push((err as Error).message);
+          }
+        }
+        if (added) toast(`${added} now creator instruction${added === 1 ? "" : "s"} on the cut list`, "ok");
+        if (failed.length) toast(failed[0], "error");
+      } else {
+        const res = await api<{ added: number }>(`/api/videos/${videoId}/plan/apply`, {
+          method: "POST",
+          json: { itemIds: [...picked] },
+        });
+        toast(`${res.added} added to the cut list`, "ok");
+      }
       setPicked(new Set());
       onChanged();
     } catch (err) {
@@ -326,6 +424,18 @@ export function PlanPanel({
               {video.role === "reference" ? "Use as footage" : "Mark as reference"}
             </Button>
           ) : null}
+          {canRun && video?.role === "reference" && data?.analysis?.status === "done" ? (
+            <Button
+              size="sm"
+              variant="ghost"
+              icon={<LayoutTemplate size={13} />}
+              loading={templating}
+              onClick={saveStyleAsTemplate}
+              title="Its rhythm is measured, its look is read from the frames, and both become a template you can start reels from."
+            >
+              Save its style as a template
+            </Button>
+          ) : null}
         </div>
       </Panel>
 
@@ -336,15 +446,29 @@ export function PlanPanel({
           title="What is actually in this clip"
           action={
             canRun ? (
-              <Button
-                size="sm"
-                variant={analysis?.status === "done" ? "ghost" : "primary"}
-                icon={<Scan size={14} />}
-                loading={loading || running}
-                onClick={analyse}
-              >
-                {analysis?.status === "done" ? "Re-analyse" : "Analyse footage"}
-              </Button>
+              <div className="flex items-center gap-2">
+                {payload && aiAvailable ? (
+                  <Button
+                    size="sm"
+                    variant="quiet"
+                    icon={<Eye size={13} />}
+                    loading={enriching}
+                    onClick={enrich}
+                    title="A cheap vision pass names the subject, framing and quality of each shot. Fast tier."
+                  >
+                    {payload.enriched ? "Re-read shots with AI" : "Read shots with AI"}
+                  </Button>
+                ) : null}
+                <Button
+                  size="sm"
+                  variant={analysis?.status === "done" ? "ghost" : "primary"}
+                  icon={<Scan size={14} />}
+                  loading={loading || running}
+                  onClick={analyse}
+                >
+                  {analysis?.status === "done" ? "Re-analyse" : "Analyse footage"}
+                </Button>
+              </div>
             ) : null
           }
         />
@@ -409,9 +533,9 @@ export function PlanPanel({
         />
 
         <div className="px-5 pb-5">
-          {!payload ? (
+          {!payload && recs.length === 0 ? (
             <p className="text-[12.5px] text-faint">Analyse the clip first.</p>
-          ) : !plan ? (
+          ) : !plan && recs.length === 0 ? (
             <p className="text-[12.5px] text-mute leading-relaxed max-w-[62ch]">
               The plan turns those measurements into moves: what to open on, what to cut,
               where to land on the beat, what to put on screen.{" "}
@@ -422,11 +546,15 @@ export function PlanPanel({
           ) : (
             <PlanBody
               plan={plan}
+              recs={recs}
               picked={picked}
               setPicked={setPicked}
-              canApply={canRun}
+              canApply={canRun && canDecide}
+              canDecide={canDecide}
+              canExplain={canRun}
               applying={applying}
               onApply={applyPicked}
+              onChanged={onChanged}
               projectId={projectId}
               videoId={videoId}
             />
@@ -525,6 +653,8 @@ function Measurements({
         </div>
       ) : null}
 
+      <ShotIntelligence shots={payload.shots} videoId={videoId} projectId={projectId} enriched={Boolean(payload.enriched)} />
+
       {payload.speech_text?.text ? (
         <details className="group">
           <summary className="text-[11.5px] text-faint cursor-pointer hover:text-mute list-none">
@@ -549,22 +679,136 @@ function Measurements({
   );
 }
 
+/**
+ * What the analyser worked out about each shot: which ones open strongest,
+ * which are weak, which repeat, which would serve as b-roll. When the AI has
+ * read the frames, the subject and framing sit beside the numbers.
+ */
+function ShotIntelligence({
+  shots,
+  videoId,
+  projectId,
+  enriched,
+}: {
+  shots: Shot[];
+  videoId: string;
+  projectId: string;
+  enriched: boolean;
+}) {
+  const scored = shots.filter((s) => typeof s.hook_score === "number");
+  if (scored.length === 0) return null;
+
+  const openers = [...scored].sort((a, b) => (b.hook_score ?? 0) - (a.hook_score ?? 0)).slice(0, 3);
+  const weak = scored.filter((s) => s.weak);
+  const duplicates = scored.filter((s) => s.duplicate_of !== null && s.duplicate_of !== undefined);
+  const broll = scored.filter((s) => s.broll);
+
+  const at = (shot: Shot) => (
+    <Link
+      href={`/app/projects/${projectId}/walkthrough/${videoId}?t=${shot.start_ms}`}
+      className="tabular text-chalk-dim hover:text-signal"
+    >
+      {timecode(shot.start_ms)}
+    </Link>
+  );
+
+  const describe = (shot: Shot) => {
+    const bits: string[] = [];
+    if (shot.camera) bits.push(shot.camera);
+    if (shot.intel) bits.push(shot.intel.subject, shot.intel.framing);
+    if (shot.intel?.face === "clear") bits.push("face");
+    return bits.join(", ");
+  };
+
+  return (
+    <div className="glass-soft rounded-[12px] px-4 py-3.5 space-y-3">
+      <div className="flex items-center justify-between gap-3">
+        <p className="text-eyebrow">Shot intelligence</p>
+        <span className="text-[11px] text-faint">
+          {enriched ? "measured and read by AI" : "measured locally; read with AI for subject and framing"}
+        </span>
+      </div>
+      <div className="grid sm:grid-cols-2 gap-x-6 gap-y-2 text-[12.5px]">
+        <div>
+          <p className="text-[11px] text-faint mb-1">Strongest openers</p>
+          <ul className="space-y-1">
+            {openers.map((shot) => (
+              <li key={shot.idx} className="flex items-center gap-2">
+                {at(shot)}
+                <span className="text-chalk">hook {shot.hook_score}</span>
+                <span className="text-mute truncate">{describe(shot)}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+        <div className="space-y-2">
+          {weak.length ? (
+            <p className="text-mute">
+              <span className="text-[11px] text-faint block">Weak</span>
+              {weak.slice(0, 6).map((shot, i) => (
+                <span key={shot.idx}>
+                  {i ? ", " : ""}
+                  {at(shot)}
+                </span>
+              ))}
+              {weak.length > 6 ? ` and ${weak.length - 6} more` : ""}
+            </p>
+          ) : null}
+          {duplicates.length ? (
+            <p className="text-mute">
+              <span className="text-[11px] text-faint block">Repeats an earlier shot</span>
+              {duplicates.slice(0, 6).map((shot, i) => (
+                <span key={shot.idx}>
+                  {i ? ", " : ""}
+                  {at(shot)}
+                </span>
+              ))}
+            </p>
+          ) : null}
+          {broll.length ? (
+            <p className="text-mute">
+              <span className="text-[11px] text-faint block">Would work as b-roll</span>
+              {broll.slice(0, 6).map((shot, i) => (
+                <span key={shot.idx}>
+                  {i ? ", " : ""}
+                  {at(shot)}
+                </span>
+              ))}
+            </p>
+          ) : null}
+          {!weak.length && !duplicates.length && !broll.length ? (
+            <p className="text-faint">Nothing flagged. Every shot holds its own.</p>
+          ) : null}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function PlanBody({
   plan,
+  recs,
   picked,
   setPicked,
   canApply,
+  canDecide,
+  canExplain,
   applying,
   onApply,
+  onChanged,
   projectId,
   videoId,
 }: {
-  plan: PlanPayload;
+  plan: PlanPayload | null;
+  recs: Recommendation[];
   picked: Set<string>;
   setPicked: (next: Set<string>) => void;
   canApply: boolean;
+  canDecide: boolean;
+  canExplain: boolean;
   applying: boolean;
   onApply: () => void;
+  onChanged: () => void;
   projectId: string;
   videoId: string;
 }) {
@@ -586,13 +830,26 @@ function PlanBody({
     }
   }
 
+  // What "select all" means: every row still on the table. Rejected rows are
+  // left out on purpose; picking them in bulk would undo a decision.
+  const selectable = recs.length
+    ? recs.filter((r) => r.status !== "rejected").map((r) => r.id)
+    : (plan?.items ?? []).map((i) => i.id);
+  const allPicked = selectable.length > 0 && selectable.every((id) => picked.has(id));
+  const liveCount = recs.length
+    ? recs.filter((r) => r.status !== "rejected").length
+    : (plan?.items.length ?? 0);
+
   return (
     <div className="space-y-5">
-      <div>
-        <p className="text-[14px] text-chalk leading-snug">{plan.headline}</p>
-        <p className="text-[12.5px] text-mute mt-1.5 leading-relaxed">{plan.read}</p>
-      </div>
+      {plan ? (
+        <div>
+          <p className="text-[14px] text-chalk leading-snug">{plan.headline}</p>
+          <p className="text-[12.5px] text-mute mt-1.5 leading-relaxed">{plan.read}</p>
+        </div>
+      ) : null}
 
+      {plan ? (
       <div className="grid sm:grid-cols-3 gap-2">
         <div className="rounded-[11px] glass-soft px-3 py-2.5">
           <div className="flex items-center justify-between">
@@ -628,8 +885,9 @@ function PlanBody({
           <p className="text-[11.5px] text-mute mt-1.5 leading-relaxed">{plan.music}</p>
         </div>
       </div>
+      ) : null}
 
-      {plan.reference ? (
+      {plan?.reference ? (
         <p className="text-[12px] text-chalk-dim leading-relaxed flex items-start gap-2">
           <Activity size={13} className="text-signal shrink-0 mt-0.5" />
           {plan.reference}
@@ -638,23 +896,25 @@ function PlanBody({
 
       {/* Items */}
       <div>
-        <div className="flex items-center justify-between gap-3 mb-2">
-          <p className="text-eyebrow">
-            {plan.items.length} suggestion{plan.items.length === 1 ? "" : "s"}
-          </p>
-          {canApply ? (
+        <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 mb-2">
+          <div className="min-w-0">
+            <p className="text-eyebrow">
+              {liveCount} AI suggestion{liveCount === 1 ? "" : "s"}
+            </p>
+            {recs.length ? (
+              <p className="text-[11px] text-faint mt-0.5 leading-relaxed">
+                A suggestion is not an instruction. Approve, change or reject each one; only
+                "Make it an instruction" puts it on the cut list.
+              </p>
+            ) : null}
+          </div>
+          {canApply && selectable.length > 0 ? (
             <div className="flex items-center gap-2">
               <button
-                onClick={() =>
-                  setPicked(
-                    picked.size === plan.items.length
-                      ? new Set()
-                      : new Set(plan.items.map((i) => i.id)),
-                  )
-                }
+                onClick={() => setPicked(allPicked ? new Set() : new Set(selectable))}
                 className="text-[11.5px] text-mute hover:text-chalk"
               >
-                {picked.size === plan.items.length ? "Clear" : "Select all"}
+                {allPicked ? "Clear" : "Select all"}
               </button>
               <Button
                 size="sm"
@@ -664,14 +924,71 @@ function PlanBody({
                 loading={applying}
                 onClick={onApply}
               >
-                Add {picked.size || ""} to cut list
+                {recs.length
+                  ? `Make ${picked.size || ""} instruction${picked.size === 1 ? "" : "s"}`
+                  : `Add ${picked.size || ""} to cut list`}
               </Button>
             </div>
           ) : null}
         </div>
 
+        {recs.length ? (
+          <div className="space-y-4">
+            {GROUPS.map((group) => {
+              const rows = recs.filter((r) => group.status.includes(r.status));
+              if (rows.length === 0) return null;
+              const list = (
+                <ul className="space-y-1.5">
+                  {rows.map((rec) => (
+                    <RecommendationRow
+                      key={rec.id}
+                      rec={rec}
+                      projectId={projectId}
+                      canDecide={canDecide}
+                      canExplain={canExplain}
+                      picked={canApply && rec.status !== "rejected" ? picked.has(rec.id) : undefined}
+                      onTogglePick={
+                        canApply && rec.status !== "rejected" ? () => toggle(rec.id) : undefined
+                      }
+                      onChanged={onChanged}
+                    />
+                  ))}
+                </ul>
+              );
+              if (group.folded) {
+                return (
+                  <details key={group.title} className="group">
+                    <summary className="list-none cursor-pointer flex items-center gap-2 text-[11px] text-faint hover:text-mute">
+                      <span className="uppercase tracking-wider font-medium">{group.title}</span>
+                      <span className="tabular">{rows.length}</span>
+                      <span className="text-[10.5px] normal-case tracking-normal font-normal">
+                        {group.hint}
+                      </span>
+                    </summary>
+                    <div className="mt-2">{list}</div>
+                  </details>
+                );
+              }
+              return (
+                <div key={group.title}>
+                  <div className="flex items-baseline gap-2 mb-1.5 flex-wrap">
+                    <span className="text-[11px] uppercase tracking-wider font-medium text-chalk-dim">
+                      {group.title}
+                    </span>
+                    <span className="text-[11px] tabular text-faint">{rows.length}</span>
+                    <span className="text-[10.5px] text-faint">{group.hint}</span>
+                  </div>
+                  {list}
+                </div>
+              );
+            })}
+          </div>
+        ) : null}
+
+        {/* Plans made before recommendation rows existed still render their items. */}
+        {recs.length === 0 ? (
         <ul className="space-y-1.5">
-          {plan.items.map((item) => {
+          {(plan?.items ?? []).map((item) => {
             const style = labelStyle(item.type);
             const on = picked.has(item.id);
             return (
@@ -733,9 +1050,11 @@ function PlanBody({
             );
           })}
         </ul>
+        ) : null}
       </div>
 
       {/* Copy drafts */}
+      {plan ? (
       <div className="grid sm:grid-cols-2 gap-3">
         <div className="rounded-[11px] glass-soft px-3.5 py-3">
           <div className="flex items-center justify-between mb-2">
@@ -787,6 +1106,7 @@ function PlanBody({
           </ul>
         </div>
       </div>
+      ) : null}
     </div>
   );
 }

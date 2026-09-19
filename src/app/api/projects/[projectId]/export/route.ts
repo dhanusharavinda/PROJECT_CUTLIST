@@ -3,6 +3,7 @@ import { badRequest, requireCtx } from "@/lib/tenancy";
 import { timecode } from "@/lib/format";
 import { labelStyle } from "@/lib/labelStyle";
 import { buildPacket, packetRefusals } from "@/lib/reel/packet";
+import { buildEditGraph, compactGraph } from "@/lib/graph/build";
 import { renderPacket } from "@/lib/reel/render";
 
 type Params = { params: Promise<{ projectId: string }> };
@@ -29,6 +30,24 @@ export const GET = route(async (req, { params }: Params) => {
   const packet = await buildPacket(ctx, projectId, { stills: format === "packet" });
   const { project, videos, labels, notes, titleById } = packet.source;
   const slug = packet.slug;
+
+  // ── The AI project package ───────────────────────────────────────────────
+  //
+  // Structured context for an outside agent: brief, template, transcript,
+  // shots, frames as URLs, instructions, recommendations, guardrails, the reel
+  // and the version history. Never the video itself.
+  if (format === "package") {
+    const graph = compactGraph(buildEditGraph(ctx, projectId));
+    return new Response(
+      JSON.stringify({ format: "cutlist-ai-package", schema: 1, ...graph }, null, 2),
+      {
+        headers: {
+          "Content-Type": "application/json; charset=utf-8",
+          "Content-Disposition": `attachment; filename="${slug}-ai-package.json"`,
+        },
+      },
+    );
+  }
 
   // ── The packet ────────────────────────────────────────────────────────────
   //

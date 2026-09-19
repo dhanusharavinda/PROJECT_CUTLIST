@@ -1,18 +1,24 @@
 "use client";
 
-import { useState } from "react";
+import Link from "next/link";
+import { useCallback, useEffect, useState } from "react";
+import clsx from "clsx";
 import {
   AlertTriangle,
+  ArrowUpRight,
   HelpCircle,
   Plus,
   RefreshCw,
   Sparkles,
 } from "lucide-react";
-import { Button, Chip, Empty, useToast } from "@/components/ui";
+import { Button, Chip, Empty, Panel, PanelHeader, Spinner, useToast } from "@/components/ui";
 import { labelStyle } from "@/lib/labelStyle";
 import { relativeTime, timecode } from "@/lib/format";
 import type { SuggestionPayload } from "@/lib/types";
+import type { EditGraph } from "@/lib/graph/build";
 import { api } from "./useProject";
+
+type StateTab = "footage" | "plan" | "cutlist" | "history";
 
 export function ReviewPanel({
   projectId,
@@ -21,6 +27,8 @@ export function ReviewPanel({
   hasLlm,
   activeVideoId,
   onChanged,
+  onNavigate,
+  stateKey,
 }: {
   projectId: string;
   suggestion: { payload: string; model: string; created_at: number } | null;
@@ -28,6 +36,10 @@ export function ReviewPanel({
   hasLlm: boolean;
   activeVideoId?: string | null;
   onChanged: () => void;
+  /** Where each count lives. Without it the rows link to the project page. */
+  onNavigate?: (tab: StateTab) => void;
+  /** Any string that changes when the edit does; the state block refetches on it. */
+  stateKey?: string;
 }) {
   const toast = useToast();
   const [busy, setBusy] = useState(false);
@@ -77,6 +89,8 @@ export function ReviewPanel({
 
   return (
     <div>
+      <EditState projectId={projectId} stateKey={stateKey} onNavigate={onNavigate} />
+
       <div className="flex flex-wrap items-start justify-between gap-3 mb-4">
         <div>
           <h3 className="text-[14.5px] font-semibold text-chalk">
@@ -206,6 +220,242 @@ export function ReviewPanel({
         </div>
       )}
     </div>
+  );
+}
+
+type CompactGraph = Pick<
+  EditGraph,
+  "project" | "instructions" | "recommendations" | "questions" | "unresolved"
+>;
+
+interface StateRow {
+  key: string;
+  label: string;
+  count: number;
+  hint: string;
+  tab: StateTab;
+  where: string;
+  /** Listed in full under the row: conflicts, missing links. */
+  items?: string[];
+  tone?: "warn" | "danger" | "ok";
+}
+
+/**
+ * State of the edit: six quiet counts read from the EditGraph, each pointing
+ * at where it lives. Nothing here changes anything.
+ */
+function EditState({
+  projectId,
+  stateKey,
+  onNavigate,
+}: {
+  projectId: string;
+  stateKey?: string;
+  onNavigate?: (tab: StateTab) => void;
+}) {
+  const [graph, setGraph] = useState<CompactGraph | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const res = await api<{ graph: CompactGraph }>(
+        `/api/projects/${projectId}/graph?compact=1`,
+      );
+      setGraph(res.graph);
+      setError(null);
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setLoading(false);
+    }
+  }, [projectId]);
+
+  // Refetch whenever the project's edit state changes under us.
+  useEffect(() => {
+    void load();
+  }, [load, stateKey]);
+
+  let rows: StateRow[] = [];
+  if (graph) {
+    const u = graph.unresolved;
+    const done = graph.instructions.filter((i) => i.status === "done").length;
+    const approvedWaiting = graph.recommendations.filter((r) => r.status === "approved").length;
+    const editorHolds =
+      graph.project.owner_state === "human_editing" ||
+      graph.project.owner_state === "ready_for_human";
+    const unanswered = graph.questions.filter((q) => !q.answered);
+
+    rows = [
+      {
+        key: "completed",
+        label: "Completed",
+        count: done,
+        hint: done === 1 ? "instruction done" : "instructions done",
+        tab: "cutlist",
+        where: "Cut list",
+        tone: "ok",
+      },
+      {
+        key: "unresolved",
+        label: "Unresolved",
+        count: u.open_instructions,
+        hint: u.open_instructions === 1 ? "instruction still open" : "instructions still open",
+        tab: "cutlist",
+        where: "Cut list",
+      },
+      {
+        key: "conflict",
+        label: "Conflict",
+        count: u.conflicts.length,
+        hint:
+          u.conflicts.length === 0
+            ? "nothing pulls against a rule or another instruction"
+            : "instructions pulling against each other or against your rules",
+        tab: "cutlist",
+        where: "Cut list",
+        items: u.conflicts,
+        tone: u.conflicts.length ? "danger" : undefined,
+      },
+      {
+        key: "missing",
+        label: "Missing",
+        count: u.missing_links.length,
+        hint:
+          u.missing_links.length === 0
+            ? "every clip the packet points at can be reached"
+            : "links the packet cannot point at",
+        tab: "footage",
+        where: "Footage",
+        items: u.missing_links,
+        tone: u.missing_links.length ? "warn" : undefined,
+      },
+      {
+        key: "needs_creator",
+        label: "Needs creator",
+        count: u.proposed_recommendations + u.needs_review + u.unanswered_questions,
+        hint: [
+          `${u.proposed_recommendations} proposed`,
+          `${u.needs_review} parked for review`,
+          `${u.unanswered_questions} unanswered question${u.unanswered_questions === 1 ? "" : "s"}`,
+        ].join(", "),
+        tab: unanswered.length && !u.proposed_recommendations && !u.needs_review ? "cutlist" : "plan",
+        where: unanswered.length && !u.proposed_recommendations && !u.needs_review ? "Cut list" : "Plan",
+        items: unanswered.map((q) => `${q.author ?? "Someone"} asked: ${q.body}`),
+        tone: u.proposed_recommendations + u.needs_review + u.unanswered_questions ? "warn" : undefined,
+      },
+      {
+        key: "needs_editor",
+        label: "Needs editor",
+        count: approvedWaiting + (editorHolds ? u.open_instructions : 0),
+        hint: editorHolds
+          ? `${approvedWaiting} approved but not yet an instruction, ${u.open_instructions} open with the editor`
+          : `${approvedWaiting} approved but not yet made an instruction`,
+        tab: approvedWaiting && !editorHolds ? "plan" : "cutlist",
+        where: approvedWaiting && !editorHolds ? "Plan" : "Cut list",
+      },
+      {
+        key: "ai_suggestion",
+        label: "AI suggestion",
+        count: u.proposed_recommendations,
+        hint: u.proposed_recommendations === 1 ? "proposed, not yet decided" : "proposed, not yet decided",
+        tab: "plan",
+        where: "Plan",
+      },
+    ];
+  }
+
+  return (
+    <Panel className="mb-5">
+      <PanelHeader
+        eyebrow="Read only"
+        title="State of the edit"
+        action={
+          <button
+            onClick={() => void load()}
+            aria-label="Refresh the state of the edit"
+            title="Refresh"
+            className="size-8 grid place-items-center rounded-[8px] text-faint hover:text-chalk hover:bg-white/[0.06] transition-colors"
+          >
+            {loading ? <Spinner /> : <RefreshCw size={13} />}
+          </button>
+        }
+      />
+      <div className="px-5 pb-4">
+        {error ? (
+          <p className="text-[12.5px] text-danger leading-relaxed">{error}</p>
+        ) : !graph ? (
+          <div className="space-y-2" aria-busy>
+            {[0, 1, 2, 3, 4, 5].map((i) => (
+              <div key={i} className="h-7 rounded-[8px] skeleton" />
+            ))}
+          </div>
+        ) : (
+          <dl className="divide-y divide-white/[0.05]">
+            {rows.map((row) => {
+              const color =
+                row.count === 0
+                  ? "var(--color-faint)"
+                  : row.tone === "danger"
+                    ? "#ff6b57"
+                    : row.tone === "warn"
+                      ? "#ffc857"
+                      : row.tone === "ok"
+                        ? "#5fd3b0"
+                        : "var(--color-chalk)";
+              return (
+                <div key={row.key} className="py-2 first:pt-0 last:pb-0">
+                  <div className="flex items-baseline gap-3 flex-wrap">
+                    <dt className="text-eyebrow w-[104px] shrink-0">{row.label}</dt>
+                    <dd className="flex items-baseline gap-2 min-w-0 flex-1 flex-wrap">
+                      <span className="text-[15px] tabular leading-none" style={{ color }}>
+                        {row.count}
+                      </span>
+                      <span className="text-[11.5px] text-mute leading-snug">{row.hint}</span>
+                    </dd>
+                    {onNavigate ? (
+                      <button
+                        onClick={() => onNavigate(row.tab)}
+                        className="text-[11px] text-faint hover:text-signal inline-flex items-center gap-0.5 transition-colors shrink-0"
+                      >
+                        {row.where}
+                        <ArrowUpRight size={11} />
+                      </button>
+                    ) : (
+                      <Link
+                        href={`/app/projects/${projectId}`}
+                        className="text-[11px] text-faint hover:text-signal inline-flex items-center gap-0.5 transition-colors shrink-0"
+                      >
+                        {row.where}
+                        <ArrowUpRight size={11} />
+                      </Link>
+                    )}
+                  </div>
+                  {row.items && row.items.length ? (
+                    <ul className="mt-1.5 ml-0 sm:ml-[116px] space-y-1">
+                      {row.items.map((item, index) => (
+                        <li
+                          key={index}
+                          className={clsx(
+                            "text-[12px] leading-relaxed pl-2.5 border-l",
+                            row.tone === "danger"
+                              ? "text-chalk-dim border-danger/40"
+                              : "text-mute border-white/10",
+                          )}
+                        >
+                          {item}
+                        </li>
+                      ))}
+                    </ul>
+                  ) : null}
+                </div>
+              );
+            })}
+          </dl>
+        )}
+      </div>
+    </Panel>
   );
 }
 

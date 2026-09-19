@@ -376,4 +376,142 @@ export const MIGRATIONS: { id: string; sql: string }[] = [
       CREATE INDEX idx_reel_slots ON reel_slots(project_id, idx);
     `,
   },
+  {
+    id: "0005_control_plane",
+    sql: /* sql */ `
+      -- A template is reusable creative intent, never a copy of any footage.
+      -- Every edit makes a new version; a project remembers the version it was
+      -- born from, so editing a template later never changes an existing project.
+      CREATE TABLE templates (
+        id              TEXT PRIMARY KEY,
+        workspace_id    TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+        name            TEXT NOT NULL,
+        category        TEXT NOT NULL DEFAULT '',
+        description     TEXT NOT NULL DEFAULT '',
+        favourite       INTEGER NOT NULL DEFAULT 0,
+        archived_at     INTEGER,
+        current_version INTEGER NOT NULL DEFAULT 1,
+        usage_count     INTEGER NOT NULL DEFAULT 0,
+        created_by      TEXT REFERENCES users(id) ON DELETE SET NULL,
+        created_at      INTEGER NOT NULL,
+        updated_at      INTEGER NOT NULL
+      );
+      CREATE INDEX idx_templates_ws ON templates(workspace_id, updated_at DESC);
+
+      CREATE TABLE template_versions (
+        id            TEXT PRIMARY KEY,
+        workspace_id  TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+        template_id   TEXT NOT NULL REFERENCES templates(id) ON DELETE CASCADE,
+        version       INTEGER NOT NULL,
+        payload       TEXT NOT NULL,
+        summary       TEXT NOT NULL DEFAULT '',
+        created_by    TEXT REFERENCES users(id) ON DELETE SET NULL,
+        created_at    INTEGER NOT NULL,
+        UNIQUE (template_id, version)
+      );
+
+      ALTER TABLE projects ADD COLUMN template_id TEXT;
+      ALTER TABLE projects ADD COLUMN template_version_id TEXT;
+
+      -- Who holds the edit right now. The project moves between the creator,
+      -- an AI agent and a human editor and back; this is the only place that says
+      -- which, and every change is also an event below.
+      ALTER TABLE projects ADD COLUMN owner_state TEXT NOT NULL DEFAULT 'awaiting_creator';
+
+      -- What the AI proposes. Kept apart from labels on purpose: a label is
+      -- something the creator decided, a recommendation is something a model
+      -- suggested, and only the creator turns one into the other.
+      CREATE TABLE recommendations (
+        id            TEXT PRIMARY KEY,
+        workspace_id  TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+        project_id    TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+        video_id      TEXT,
+        type          TEXT NOT NULL,
+        title         TEXT NOT NULL,
+        detail        TEXT NOT NULL DEFAULT '',
+        rationale     TEXT NOT NULL DEFAULT '',
+        start_ms      INTEGER,
+        end_ms        INTEGER,
+        confidence    REAL NOT NULL DEFAULT 0.5,
+        priority      TEXT NOT NULL DEFAULT 'normal',
+        source        TEXT NOT NULL DEFAULT 'local',
+        status        TEXT NOT NULL DEFAULT 'proposed',
+        scope         TEXT NOT NULL DEFAULT '',
+        label_id      TEXT,
+        supersedes_id TEXT,
+        run_id        TEXT,
+        created_at    INTEGER NOT NULL,
+        updated_at    INTEGER NOT NULL
+      );
+      CREATE INDEX idx_recommendations_project ON recommendations(project_id, status, start_ms);
+
+      -- Append only. Nothing here is ever updated or deleted by the app; the
+      -- history of a project is this table read in order.
+      CREATE TABLE project_events (
+        id            TEXT PRIMARY KEY,
+        workspace_id  TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+        project_id    TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+        kind          TEXT NOT NULL,
+        actor_kind    TEXT NOT NULL,
+        actor_id      TEXT,
+        subject_type  TEXT NOT NULL DEFAULT '',
+        subject_id    TEXT NOT NULL DEFAULT '',
+        payload       TEXT NOT NULL DEFAULT '{}',
+        created_at    INTEGER NOT NULL
+      );
+      CREATE INDEX idx_project_events ON project_events(project_id, created_at);
+
+      -- V1 AI draft, V2 human edit, and so on. Each one says who, when and what.
+      CREATE TABLE project_versions (
+        id            TEXT PRIMARY KEY,
+        workspace_id  TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+        project_id    TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+        number        INTEGER NOT NULL,
+        kind          TEXT NOT NULL,
+        title         TEXT NOT NULL,
+        summary       TEXT NOT NULL DEFAULT '',
+        actor_kind    TEXT NOT NULL,
+        actor_id      TEXT,
+        video_id      TEXT,
+        approval      TEXT NOT NULL DEFAULT 'pending',
+        payload       TEXT NOT NULL DEFAULT '{}',
+        created_at    INTEGER NOT NULL,
+        UNIQUE (project_id, number)
+      );
+
+      -- Every model call, so a recommendation can always be traced to the exact
+      -- prompt and answer that produced it.
+      CREATE TABLE ai_runs (
+        id            TEXT PRIMARY KEY,
+        workspace_id  TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+        project_id    TEXT,
+        task          TEXT NOT NULL,
+        tier          TEXT NOT NULL,
+        provider      TEXT NOT NULL,
+        model         TEXT NOT NULL,
+        input         TEXT NOT NULL,
+        output        TEXT NOT NULL DEFAULT '',
+        status        TEXT NOT NULL DEFAULT 'ok',
+        error         TEXT,
+        duration_ms   INTEGER NOT NULL DEFAULT 0,
+        created_at    INTEGER NOT NULL
+      );
+      CREATE INDEX idx_ai_runs_project ON ai_runs(project_id, created_at DESC);
+
+      -- Read-only access for an outside agent, scoped to one project. The token
+      -- itself is never stored, only its hash.
+      CREATE TABLE access_tokens (
+        id            TEXT PRIMARY KEY,
+        workspace_id  TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+        project_id    TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+        name          TEXT NOT NULL,
+        token_hash    TEXT NOT NULL UNIQUE,
+        scopes        TEXT NOT NULL DEFAULT 'read',
+        created_by    TEXT REFERENCES users(id) ON DELETE SET NULL,
+        created_at    INTEGER NOT NULL,
+        last_used_at  INTEGER,
+        revoked_at    INTEGER
+      );
+    `,
+  },
 ];

@@ -47,6 +47,12 @@ const START: Step[] = [
     body: "Open the project and use the Brief tab: edit type, platform, pacing, and what must never happen. The AI reads it when it labels your notes.",
   },
   {
+    title: "Save your settings as a template",
+    body: "At the top of the Brief tab, Save as template keeps the style and rules under a name. The next project can start from it, or you can apply it to a half-written brief. Editing a template later makes a new version and leaves existing projects alone.",
+    href: "/app/templates",
+    cta: "Open Templates",
+  },
+  {
     title: "Add footage",
     body: "Footage tab. Upload a file, paste a direct link, or pick a clip from Google Drive.",
   },
@@ -59,12 +65,20 @@ const START: Step[] = [
     body: "Still in the Plan tab. Pick what you are making (gym edit, aesthetic reel, surreal, mini vlog) and Cutlist suggests what to open on, what to tighten, where to land on the beat, and what to put on screen. Tick the ones you want into the cut list.",
   },
   {
+    title: "Run the creative director",
+    body: "Plan tab, top panel. It reads the brief, the rules, every shot and what you already decided, then proposes. Approve, change or reject each suggestion; only what you convert reaches the cut list. Type a sentence like \"faster middle, leave the hook alone\" to revise just that part.",
+  },
+  {
     title: "Talk over the clip",
     body: "Press Open walkthrough, park the playhead where you want a change, press R and say it out loud. The note is pinned to that exact moment.",
   },
   {
     title: "Hand off the cut list",
     body: "The Cut list tab turns notes into typed, timestamped instructions. Your editor ticks them off and asks questions on a specific row.",
+  },
+  {
+    title: "Or let an AI agent read it",
+    body: "History tab, bottom panel. Make a token, paste it and the MCP URL into ChatGPT or Astra, and the agent can read everything about the project but change nothing. Export the AI project package from the same tab for tools that take a file.",
   },
   {
     title: "Invite your editor",
@@ -101,6 +115,12 @@ const PLACES: { name: string; where: string; body: string; href?: string }[] = [
     name: "Plan",
     where: "Tab inside a project",
     body: "Footage analysis and the suggested edit. Also where you mark a reel as a reference, so its pacing becomes the target for the plan.",
+  },
+  {
+    name: "Templates",
+    where: "Sidebar",
+    body: "The settings your edits share, saved from a project's brief: platform, pacing, style, rules. Start a project from one, or apply one to a brief. Never footage.",
+    href: "/app/templates",
   },
   {
     name: "Clip library",

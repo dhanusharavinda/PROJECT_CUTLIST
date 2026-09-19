@@ -1,4 +1,5 @@
 import Anthropic from "@anthropic-ai/sdk";
+import { id, now, run } from "../db";
 import { getSecret, getSetting, type SecretKey } from "./keys";
 
 /**
@@ -24,24 +25,27 @@ export class LlmUnavailable extends Error {
 
 export const LLM_PROVIDERS = [
   {
-    id: "anthropic",
-    label: "Anthropic Claude",
-    secret: "ANTHROPIC_API_KEY" as SecretKey,
-    defaultModel: "claude-opus-5",
-    note: "Best reasoning over long, rambling voice notes. Recommended.",
-  },
-  {
     id: "openai",
     label: "OpenAI",
     secret: "OPENAI_API_KEY" as SecretKey,
-    defaultModel: "gpt-4o-mini",
-    note: "Same key also powers Whisper transcription.",
+    defaultModel: "gpt-4.1",
+    tiers: { fast: "gpt-4.1-mini", standard: "gpt-4.1", deep: "gpt-4.1" },
+    note: "Recommended. The same key powers Whisper transcription; set an o-series model as the deep tier for revision reasoning.",
+  },
+  {
+    id: "anthropic",
+    label: "Anthropic Claude",
+    secret: "ANTHROPIC_API_KEY" as SecretKey,
+    defaultModel: "claude-sonnet-5",
+    tiers: { fast: "claude-haiku-4-5-20251001", standard: "claude-sonnet-5", deep: "claude-opus-5" },
+    note: "Best reasoning over long, rambling voice notes.",
   },
   {
     id: "google",
     label: "Google Gemini",
     secret: "GOOGLE_AI_API_KEY" as SecretKey,
     defaultModel: "gemini-2.0-flash",
+    tiers: { fast: "gemini-2.0-flash", standard: "gemini-2.0-flash", deep: "gemini-2.0-flash" },
     note: "Generous free tier for hobby projects.",
   },
   {
@@ -49,6 +53,11 @@ export const LLM_PROVIDERS = [
     label: "Groq",
     secret: "GROQ_API_KEY" as SecretKey,
     defaultModel: "llama-3.3-70b-versatile",
+    tiers: {
+      fast: "llama-3.1-8b-instant",
+      standard: "llama-3.3-70b-versatile",
+      deep: "llama-3.3-70b-versatile",
+    },
     note: "Very fast, open-weight models.",
   },
   {
@@ -56,13 +65,34 @@ export const LLM_PROVIDERS = [
     label: "OpenRouter",
     secret: "OPENROUTER_API_KEY" as SecretKey,
     defaultModel: "anthropic/claude-sonnet-4",
-    note: "One key, any model. Set the model id in Settings.",
+    tiers: {
+      fast: "anthropic/claude-sonnet-4",
+      standard: "anthropic/claude-sonnet-4",
+      deep: "anthropic/claude-sonnet-4",
+    },
+    note: "One key, any model. Set the model ids in Settings.",
   },
 ] as const;
 
 export type LlmProviderId = (typeof LLM_PROVIDERS)[number]["id"];
 
-export function resolveLlm(workspaceId: string) {
+/**
+ * Three tiers, routed by task rather than by one global model.
+ *
+ * Classification, per-frame reading and short explanations go to the fast
+ * tier. Plans go to standard. Revisions, ambiguity and anything that has to
+ * hold a whole project in mind go to deep. Every tier can be overridden per
+ * workspace in Settings; the defaults are what the provider does well cheaply.
+ */
+export type Tier = "fast" | "standard" | "deep";
+
+const TIER_SETTING: Record<Tier, "LLM_MODEL_FAST" | "LLM_MODEL" | "LLM_MODEL_DEEP"> = {
+  fast: "LLM_MODEL_FAST",
+  standard: "LLM_MODEL",
+  deep: "LLM_MODEL_DEEP",
+};
+
+export function resolveLlm(workspaceId: string, tier: Tier = "standard") {
   const preferred = getSetting(workspaceId, "LLM_PROVIDER") as LlmProviderId | "";
   const candidates = preferred
     ? LLM_PROVIDERS.filter((p) => p.id === preferred)
@@ -71,14 +101,23 @@ export function resolveLlm(workspaceId: string) {
   for (const provider of candidates) {
     const key = getSecret(workspaceId, provider.secret);
     if (key) {
+      // A workspace that only set the standard model still gets sensible
+      // neighbours: the fast and deep tiers fall back to the provider defaults.
+      const chosen = getSetting(workspaceId, TIER_SETTING[tier]);
       return {
         provider,
         apiKey: key.value,
-        model: getSetting(workspaceId, "LLM_MODEL") || provider.defaultModel,
+        model: chosen || provider.tiers[tier] || provider.defaultModel,
+        tier,
       };
     }
   }
   return null;
+}
+
+/** Reasoning models take max_completion_tokens and refuse a temperature. */
+function reasoningModel(model: string): boolean {
+  return /^o\d/i.test(model) || /^gpt-5/i.test(model);
 }
 
 export function hasLlm(workspaceId: string): boolean {
@@ -100,6 +139,12 @@ export interface CompleteOptions {
   json?: boolean;
   /** Stills for the model to look at. Ignored where the provider cannot see. */
   images?: ImagePart[];
+  /** Which model tier to route to. Defaults to standard. */
+  tier?: Tier;
+  /** What this call is for, recorded with the run: "label", "plan", "explain", "revise". */
+  task?: string;
+  /** The project the run belongs to, so it shows in that project's history. */
+  projectId?: string | null;
 }
 
 /**
@@ -137,11 +182,11 @@ function openaiContent(user: string, images?: ImagePart[]) {
   ];
 }
 
-export async function complete(
+async function completeRaw(
   workspaceId: string,
   opts: CompleteOptions,
 ): Promise<LlmResult> {
-  const resolved = resolveLlm(workspaceId);
+  const resolved = resolveLlm(workspaceId, opts.tier ?? "standard");
   if (!resolved) {
     throw new LlmUnavailable(
       "No language-model key is configured for this workspace. Add one in Settings → AI providers.",
@@ -279,8 +324,9 @@ async function openaiCompatible(
     },
     body: JSON.stringify({
       model,
-      max_tokens: maxTokens,
-      temperature: 0.2,
+      ...(reasoningModel(model)
+        ? { max_completion_tokens: maxTokens }
+        : { max_tokens: maxTokens, temperature: 0.2 }),
       messages: [
         { role: "system", content: system },
         { role: "user", content: openaiContent(user, images) },
@@ -415,4 +461,68 @@ export function parseJson<T>(raw: string): T | null {
     }
   }
   return null;
+}
+
+// ── Every call, recorded ────────────────────────────────────────────────────
+
+const INPUT_KEEP = 24_000;
+const OUTPUT_KEEP = 24_000;
+
+/**
+ * The one entry point. Routes to a tier, makes the call, and writes an ai_runs
+ * row either way, so a recommendation can always be traced to the exact prompt
+ * and answer that produced it. Images are recorded as a count, never as bytes.
+ */
+export async function complete(
+  workspaceId: string,
+  opts: CompleteOptions,
+): Promise<LlmResult & { runId: string }> {
+  const tier = opts.tier ?? "standard";
+  const resolved = resolveLlm(workspaceId, tier);
+  const started = Date.now();
+  const runId = id("run");
+
+  const input = JSON.stringify({
+    system: opts.system,
+    user: opts.user,
+    json: Boolean(opts.json),
+    images: opts.images?.length ?? 0,
+  }).slice(0, INPUT_KEEP);
+
+  try {
+    const result = await completeRaw(workspaceId, opts);
+    run(
+      `INSERT INTO ai_runs (id, workspace_id, project_id, task, tier, provider, model, input, output, status, error, duration_ms, created_at)
+       VALUES (?,?,?,?,?,?,?,?,?,'ok',NULL,?,?)`,
+      runId,
+      workspaceId,
+      opts.projectId ?? null,
+      opts.task ?? "complete",
+      tier,
+      result.provider,
+      result.model,
+      input,
+      result.text.slice(0, OUTPUT_KEEP),
+      Date.now() - started,
+      now(),
+    );
+    return { ...result, runId };
+  } catch (err) {
+    run(
+      `INSERT INTO ai_runs (id, workspace_id, project_id, task, tier, provider, model, input, output, status, error, duration_ms, created_at)
+       VALUES (?,?,?,?,?,?,?,?,'','failed',?,?,?)`,
+      runId,
+      workspaceId,
+      opts.projectId ?? null,
+      opts.task ?? "complete",
+      tier,
+      resolved?.provider.id ?? "none",
+      resolved?.model ?? "",
+      input,
+      String((err as Error).message ?? err).slice(0, 1000),
+      Date.now() - started,
+      now(),
+    );
+    throw err;
+  }
 }

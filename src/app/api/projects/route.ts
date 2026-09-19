@@ -3,6 +3,8 @@ import { body, json, route } from "@/lib/api";
 import { id, many, now, run, tx } from "@/lib/db";
 import { assert, can, requireCtx } from "@/lib/tenancy";
 import { logActivity } from "@/lib/activity";
+import { applyTemplate, getTemplate } from "@/lib/templates/store";
+import { recordEvent } from "@/lib/graph/events";
 
 export const GET = route(async () => {
   const ctx = await requireCtx();
@@ -40,6 +42,8 @@ const Create = z.object({
   name: z.string().trim().min(1, "Give the project a name.").max(120),
   summary: z.string().trim().max(600).optional(),
   dueAt: z.number().int().positive().nullable().optional(),
+  /** Start from a saved template instead of an empty brief. */
+  templateId: z.string().trim().min(1).optional(),
 });
 
 export const POST = route(async (req) => {
@@ -74,12 +78,26 @@ export const POST = route(async (req) => {
     );
   });
 
+  // The template pre-fills the brief and pins the exact version, so editing
+  // the template later cannot reach into this project.
+  let fromTemplate: string | null = null;
+  if (input.templateId) {
+    const template = getTemplate(ctx, input.templateId);
+    applyTemplate(ctx, projectId, template.id, "overwrite");
+    fromTemplate = template.name;
+  }
+
+  recordEvent(ctx, projectId, {
+    kind: "project.created",
+    payload: { template: fromTemplate },
+  });
+
   logActivity({
     workspaceId: ctx.workspace.id,
     projectId,
     actorId: ctx.user.id,
     verb: "project.created",
-    summary: `${input.name} created`,
+    summary: fromTemplate ? `${input.name} created from ${fromTemplate}` : `${input.name} created`,
   });
 
   return json({ id: projectId });
