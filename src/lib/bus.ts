@@ -7,6 +7,7 @@ export type BusEvent =
   | { type: "video"; projectId: string; payload: unknown }
   | { type: "brief"; projectId: string; payload: unknown }
   | { type: "suggestion"; projectId: string; payload: unknown }
+  | { type: "reel"; projectId: string; payload: unknown }
   | { type: "presence"; projectId: string; payload: unknown };
 
 /**
@@ -14,7 +15,7 @@ export type BusEvent =
  *
  * One emitter per process, keyed by `workspaceId:projectId` so a subscriber can
  * never be attached to a channel outside its own workspace. Single-process by
- * design — swap this module for Redis pub/sub to run more than one instance.
+ * design; swap this module for Redis pub/sub to run more than one instance.
  */
 class Bus {
   private emitter = new EventEmitter();

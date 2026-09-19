@@ -26,10 +26,11 @@ export function Recorder({
   disabled,
   sttLabel,
   registerTrigger,
+  onPhase,
 }: {
   projectId: string;
   videoId: string | null;
-  /** Read at the moment recording starts — that is the frame being talked about. */
+  /** Read at the moment recording starts: that is the frame being talked about. */
   getAnchorMs: () => number;
   onBeforeRecord?: () => void;
   onDone: (summary: { labels: number; warning?: string }) => void;
@@ -37,6 +38,8 @@ export function Recorder({
   sttLabel: string | null;
   /** Lets the walkthrough bind the R key to this recorder. */
   registerTrigger?: (toggle: () => void) => void;
+  /** Reports the recording phase so the cue overlay can get out of the way. */
+  onPhase?: (phase: Phase) => void;
 }) {
   const toast = useToast();
   const [phase, setPhase] = useState<Phase>("idle");
@@ -44,6 +47,11 @@ export function Recorder({
   const [level, setLevel] = useState(0);
   const [typing, setTyping] = useState(false);
   const [draft, setDraft] = useState("");
+
+  // The cue overlay hides while the creator is talking.
+  useEffect(() => {
+    onPhase?.(phase);
+  }, [phase, onPhase]);
 
   const recorder = useRef<MediaRecorder | null>(null);
   const chunks = useRef<Blob[]>([]);
@@ -131,7 +139,7 @@ export function Recorder({
         teardown();
         if (blob.size < 900) {
           setPhase("idle");
-          toast("That was too short to transcribe — hold it a moment longer.", "error");
+          toast("That was too short to transcribe. Hold it a moment longer.", "error");
           return;
         }
         void submit(blob, type.split(";")[0], duration);
@@ -334,7 +342,7 @@ export function Recorder({
               <p className="text-[11.5px] text-faint mt-0.5 truncate">
                 {sttLabel
                   ? `${sttLabel} · pins to ${timecode(getAnchorMs())}`
-                  : "No transcription key — the recording is saved, but not transcribed"}
+                  : "No transcription key. The recording is saved, but not transcribed"}
               </p>
             </>
           )}

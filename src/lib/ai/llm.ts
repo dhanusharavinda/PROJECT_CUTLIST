@@ -5,7 +5,7 @@ import { getSecret, getSetting, type SecretKey } from "./keys";
  * One `complete()` call, five possible backends.
  *
  * Anthropic goes through the official SDK. The remaining providers are reached
- * over their own HTTP APIs — three of them share OpenAI's chat-completions
+ * over their own HTTP APIs; three of them share OpenAI's chat-completions
  * shape, so they collapse into a single code path.
  */
 
@@ -85,12 +85,56 @@ export function hasLlm(workspaceId: string): boolean {
   return resolveLlm(workspaceId) !== null;
 }
 
+export interface ImagePart {
+  /** image/jpeg or image/png. */
+  mime: string;
+  /** base64, without the data: prefix. */
+  data: string;
+}
+
 export interface CompleteOptions {
   system: string;
   user: string;
   maxTokens?: number;
   /** Ask the model for a single JSON object and nothing else. */
   json?: boolean;
+  /** Stills for the model to look at. Ignored where the provider cannot see. */
+  images?: ImagePart[];
+}
+
+/**
+ * Whether this provider's default endpoint accepts images. Groq and OpenRouter
+ * can, but only on some models, so they stay text-only rather than failing a
+ * whole request on a model the workspace happens to have chosen.
+ */
+export function visionCapable(providerId: string): boolean {
+  return providerId === "anthropic" || providerId === "openai" || providerId === "google";
+}
+
+function anthropicContent(user: string, images?: ImagePart[]) {
+  if (!images?.length) return user;
+  return [
+    ...images.map((image) => ({
+      type: "image" as const,
+      source: {
+        type: "base64" as const,
+        media_type: image.mime as "image/jpeg" | "image/png" | "image/gif" | "image/webp",
+        data: image.data,
+      },
+    })),
+    { type: "text" as const, text: user },
+  ];
+}
+
+function openaiContent(user: string, images?: ImagePart[]) {
+  if (!images?.length) return user;
+  return [
+    { type: "text", text: user },
+    ...images.map((image) => ({
+      type: "image_url",
+      image_url: { url: `data:${image.mime};base64,${image.data}` },
+    })),
+  ];
 }
 
 export async function complete(
@@ -113,7 +157,7 @@ export async function complete(
   try {
     switch (provider.id) {
       case "anthropic":
-        return await anthropic(apiKey, model, system, opts.user, maxTokens);
+        return await anthropic(apiKey, model, system, opts.user, maxTokens, opts.images);
       case "openai":
         return await openaiCompatible(
           "https://api.openai.com/v1/chat/completions",
@@ -124,6 +168,7 @@ export async function complete(
           maxTokens,
           "openai",
           opts.json,
+          opts.images,
         );
       case "groq":
         return await openaiCompatible(
@@ -135,6 +180,7 @@ export async function complete(
           maxTokens,
           "groq",
           opts.json,
+          opts.images,
         );
       case "openrouter":
         return await openaiCompatible(
@@ -146,9 +192,10 @@ export async function complete(
           maxTokens,
           "openrouter",
           opts.json,
+          opts.images,
         );
       case "google":
-        return await gemini(apiKey, model, system, opts.user, maxTokens, opts.json);
+        return await gemini(apiKey, model, system, opts.user, maxTokens, opts.json, opts.images);
     }
   } catch (err) {
     if (err instanceof LlmUnavailable) throw err;
@@ -166,6 +213,7 @@ async function anthropic(
   system: string,
   user: string,
   maxTokens: number,
+  images?: ImagePart[],
 ): Promise<LlmResult> {
   const client = new Anthropic({ apiKey });
   try {
@@ -173,7 +221,7 @@ async function anthropic(
       model,
       max_tokens: maxTokens,
       system,
-      messages: [{ role: "user", content: user }],
+      messages: [{ role: "user", content: anthropicContent(user, images) }],
     });
 
     if (response.stop_reason === "refusal") {
@@ -218,6 +266,7 @@ async function openaiCompatible(
   maxTokens: number,
   providerId: string,
   json?: boolean,
+  images?: ImagePart[],
 ): Promise<LlmResult> {
   const res = await fetch(url, {
     method: "POST",
@@ -234,7 +283,7 @@ async function openaiCompatible(
       temperature: 0.2,
       messages: [
         { role: "system", content: system },
-        { role: "user", content: user },
+        { role: "user", content: openaiContent(user, images) },
       ],
       ...(json ? { response_format: { type: "json_object" } } : {}),
     }),
@@ -262,6 +311,7 @@ async function gemini(
   user: string,
   maxTokens: number,
   json?: boolean,
+  images?: ImagePart[],
 ): Promise<LlmResult> {
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(
     model,
@@ -272,7 +322,17 @@ async function gemini(
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       systemInstruction: { parts: [{ text: system }] },
-      contents: [{ role: "user", parts: [{ text: user }] }],
+      contents: [
+        {
+          role: "user",
+          parts: [
+            ...(images ?? []).map((image) => ({
+              inline_data: { mime_type: image.mime, data: image.data },
+            })),
+            { text: user },
+          ],
+        },
+      ],
       generationConfig: {
         maxOutputTokens: maxTokens,
         temperature: 0.2,

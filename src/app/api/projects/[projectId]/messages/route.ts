@@ -38,7 +38,7 @@ export const POST = route(async (req, { params }: Params) => {
 
   const input = Send.parse(await body(req));
 
-  // A message can be pinned to one instruction — that is how a question about
+  // A message can be pinned to one instruction. That is how a question about
   // "the punch-in at 1:41" stays attached to the punch-in instead of scrolling
   // away in the room. The label has to be real, and in this project.
   if (input.meta?.labelId) {

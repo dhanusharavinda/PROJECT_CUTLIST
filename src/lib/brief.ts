@@ -120,7 +120,7 @@ export const BRIEF_SECTIONS: BriefSection[] = [
         label: "Reference edits",
         kind: "textarea",
         hint: "Links or channel names whose style you want matched.",
-        placeholder: "https://youtu.be/… — I want the b-roll rhythm from this",
+        placeholder: "https://youtu.be/…, I want the b-roll rhythm from this",
       },
     ],
   },
@@ -151,7 +151,7 @@ export const BRIEF_SECTIONS: BriefSection[] = [
         key: "musicSource",
         label: "Where music comes from",
         kind: "text",
-        placeholder: "Epidemic Sound — account details in the shared drive",
+        placeholder: "Epidemic Sound (account details in the shared drive)",
       },
       {
         key: "brollSource",
@@ -280,7 +280,7 @@ export function sanitiseBrief(input: unknown): BriefValues {
   return out;
 }
 
-/** Compact, human-readable version for prompts — skips empty fields. */
+/** Compact, human-readable version for prompts; skips empty fields. */
 export function briefForPrompt(values: BriefValues): Record<string, string> {
   const out: Record<string, string> = {};
   for (const field of BRIEF_FIELDS) {

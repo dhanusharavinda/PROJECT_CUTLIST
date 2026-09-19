@@ -8,6 +8,7 @@ import {
   Check,
   ChevronsUpDown,
   LayoutGrid,
+  Library,
   LogOut,
   Menu,
   Plus,
@@ -15,6 +16,7 @@ import {
   X,
 } from "lucide-react";
 import { Avatar, Button, Modal, useToast } from "@/components/ui";
+import { HelpButton } from "@/components/HelpButton";
 import type { Role, Workspace } from "@/lib/types";
 
 interface Props {
@@ -44,6 +46,9 @@ export function AppShell({
 
   useEffect(() => setMobileOpen(false), [pathname]);
 
+  const inWalkthrough = pathname.includes("/walkthrough/");
+  const helpTopic = inWalkthrough ? "notes" : "start";
+
   return (
     <div className="min-h-dvh lg:grid lg:grid-cols-[254px_1fr]">
       <a href="#content" className="skip-to-content">
@@ -60,7 +65,10 @@ export function AppShell({
           <Menu size={18} />
         </button>
         <span className="text-display text-[15px] truncate">{workspace.name}</span>
-        <Avatar name={user.name} seed={user.id} size={26} />
+        <div className="flex items-center gap-1 -mr-1">
+          <HelpButton compact initialTopic={helpTopic} />
+          <Avatar name={user.name} seed={user.id} size={26} />
+        </div>
       </div>
 
       {mobileOpen ? (
@@ -100,6 +108,19 @@ export function AppShell({
       </aside>
 
       <main id="content" className="min-w-0">
+        {/* The walkthrough brings its own top bar and needs the full height. */}
+        {inWalkthrough ? null : (
+          <header className="hidden lg:flex sticky top-0 z-30 h-12 items-center justify-between gap-4 px-6 glass-deep border-b border-white/[0.06]">
+            <p className="min-w-0 truncate text-[13px]">
+              <span className="text-faint">{workspace.name}</span>
+              <span className="mx-2 text-faint/60" aria-hidden>
+                /
+              </span>
+              <span className="text-chalk-dim">{sectionFor(pathname, projects)}</span>
+            </p>
+            <HelpButton initialTopic={helpTopic} />
+          </header>
+        )}
         {children}
       </main>
     </div>
@@ -236,6 +257,13 @@ function SidebarBody({
           Overview
         </NavLink>
         <NavLink
+          href="/app/library"
+          icon={<Library size={15} />}
+          active={pathname.startsWith("/app/library")}
+        >
+          Clip library
+        </NavLink>
+        <NavLink
           href="/app/settings"
           icon={<Settings size={15} />}
           active={pathname.startsWith("/app/settings")}
@@ -323,6 +351,15 @@ function SidebarBody({
       </Modal>
     </div>
   );
+}
+
+/** What the header names as "where you are". */
+function sectionFor(pathname: string, projects: Props["projects"]): string {
+  if (pathname.startsWith("/app/settings")) return "Settings";
+  if (pathname.startsWith("/app/library")) return "Clip library";
+  const match = pathname.match(/^\/app\/projects\/([^/]+)/);
+  if (match) return projects.find((p) => p.id === match[1])?.name ?? "Project";
+  return "Overview";
 }
 
 function NavLink({

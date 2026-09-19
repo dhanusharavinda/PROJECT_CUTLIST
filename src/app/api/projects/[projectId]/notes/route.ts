@@ -86,7 +86,7 @@ export const POST = route(async (req, { params }: Params) => {
     }
     if (size === 0) {
       await removeKey(audioKey);
-      throw badRequest("The recording was empty — try holding the button longer.");
+      throw badRequest("The recording was empty. Try holding the button longer.");
     }
   }
 

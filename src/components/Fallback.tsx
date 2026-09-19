@@ -19,7 +19,7 @@ export function FullPageState({
   title: string;
   body: ReactNode;
   actions?: ReactNode;
-  /** Technical detail, folded away — useful when reporting a bug. */
+  /** Technical detail, folded away. Useful when reporting a bug. */
   detail?: string;
 }) {
   return (
@@ -51,7 +51,7 @@ export function FullPageState({
   );
 }
 
-/** The wordmark glyph, enlarged — a quiet anchor rather than a sad-face icon. */
+/** The wordmark glyph, enlarged: a quiet anchor rather than a sad-face icon. */
 function Mark() {
   return (
     <span

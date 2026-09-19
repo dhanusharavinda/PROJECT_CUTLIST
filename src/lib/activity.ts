@@ -45,7 +45,7 @@ export function recentActivity(workspaceId: string, limit = 25) {
   );
 }
 
-/** Log + broadcast in one call — the two always happen together. */
+/** Log + broadcast in one call; the two always happen together. */
 export function emit(
   workspaceId: string,
   event: BusEvent,

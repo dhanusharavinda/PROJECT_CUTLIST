@@ -3,11 +3,12 @@
 import { useMemo, useRef, useState } from "react";
 import clsx from "clsx";
 import { labelStyle } from "@/lib/labelStyle";
+import { nearestAt } from "@/lib/reel/time";
 import { timecode } from "@/lib/format";
 import type { Label } from "@/lib/types";
 
 /**
- * A marker track over a reference clip — NOT an edit timeline.
+ * A marker track over a reference clip, NOT an edit timeline.
  *
  * Nothing here modifies media. It is a read-only time axis showing where each
  * spoken instruction landed, so "where" is a click instead of a sentence. The
@@ -21,6 +22,10 @@ export function Timeline({
   onSeek,
   onPickLabel,
   activeLabelId,
+  onPickNote,
+  activeNoteId,
+  scenes,
+  beats,
 }: {
   durationMs: number;
   currentMs: number;
@@ -29,6 +34,13 @@ export function Timeline({
   onSeek: (ms: number) => void;
   onPickLabel?: (label: Label) => void;
   activeLabelId?: string | null;
+  /** A note dot was clicked: open that note at its moment. */
+  onPickNote?: (noteId: string, at: number) => void;
+  activeNoteId?: string | null;
+  /** Shot boundaries found by the analyser. */
+  scenes?: number[];
+  /** Beat grid from the music, when the track has a steady tempo. */
+  beats?: number[];
 }) {
   const track = useRef<HTMLDivElement>(null);
   const [hover, setHover] = useState<{ x: number; ms: number } | null>(null);
@@ -36,6 +48,13 @@ export function Timeline({
 
   const duration = durationMs > 0 ? durationMs : 0;
   const pct = (ms: number) => (duration ? Math.min(100, (ms / duration) * 100) : 0);
+
+  // Eight pixels of slack, in milliseconds at the current track width.
+  const hoverTolerance =
+    duration && track.current?.clientWidth
+      ? (8 / track.current.clientWidth) * duration
+      : 0;
+  const hoveredLabel = hover ? nearestAt(labels, hover.ms, hoverTolerance) : null;
 
   const ticks = useMemo(() => {
     if (!duration) return [];
@@ -61,7 +80,7 @@ export function Timeline({
   }
 
   return (
-    <div className="select-none">
+    <div className="relative select-none">
       <div className="flex items-center justify-between mb-1.5 px-0.5">
         <span className="text-eyebrow">Markers</span>
         <span className="text-[10.5px] text-faint tabular">
@@ -124,6 +143,36 @@ export function Timeline({
           style={{ width: `${pct(currentMs)}%` }}
         />
 
+        {/* beat grid, from the analysed soundtrack */}
+        {beats && beats.length > 1 && duration ? (
+          <div className="absolute inset-x-0 top-0 h-3 pointer-events-none">
+            {beats.slice(0, 600).map((beat) =>
+              beat > duration ? null : (
+                <span
+                  key={beat}
+                  className="absolute top-0 w-px h-[5px] bg-signal/25"
+                  style={{ left: `${pct(beat)}%` }}
+                />
+              ),
+            )}
+          </div>
+        ) : null}
+
+        {/* where the clip already cuts */}
+        {scenes && scenes.length > 1 && duration ? (
+          <div className="absolute inset-0 pointer-events-none">
+            {scenes.slice(0, 300).map((at) =>
+              at <= 0 || at > duration ? null : (
+                <span
+                  key={at}
+                  className="absolute top-[13px] bottom-[17px] w-px bg-white/[0.14]"
+                  style={{ left: `${pct(at)}%` }}
+                />
+              ),
+            )}
+          </div>
+        ) : null}
+
         {/* instruction markers */}
         <div className="absolute inset-x-0 top-[18px] h-[30px]">
           {labels.map((label) => {
@@ -143,8 +192,7 @@ export function Timeline({
                   onSeek(label.start_ms);
                 }}
                 onPointerDown={(e) => e.stopPropagation()}
-                title={`${timecode(label.start_ms)} · ${style.label} — ${label.title}`}
-              aria-label={`${timecode(label.start_ms)} · ${style.label} — ${label.title}`}
+                aria-label={`${timecode(label.start_ms)} · ${style.label}: ${label.title}`}
                 className="absolute top-0 bottom-0 group"
                 style={{
                   left: `${pct(label.start_ms)}%`,
@@ -191,15 +239,35 @@ export function Timeline({
         </div>
 
         {/* voice-note anchors */}
-        <div className="absolute inset-x-0 bottom-[7px] h-2">
-          {noteAnchors.map((anchor) => (
-            <span
-              key={anchor.id}
-              title={`Note at ${timecode(anchor.at)}`}
-              className="absolute size-[5px] -translate-x-1/2 rounded-full bg-white/35"
-              style={{ left: `${pct(anchor.at)}%` }}
-            />
-          ))}
+        <div className="absolute inset-x-0 bottom-[3px] h-4">
+          {noteAnchors.map((anchor) => {
+            const active = activeNoteId === anchor.id;
+            return (
+              <button
+                key={anchor.id}
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  if (onPickNote) onPickNote(anchor.id, anchor.at);
+                  else onSeek(anchor.at);
+                }}
+                onPointerDown={(e) => e.stopPropagation()}
+                title={`Voice note at ${timecode(anchor.at)}`}
+                aria-label={`Open the voice note at ${timecode(anchor.at)}`}
+                className="absolute top-0 h-4 w-3 -translate-x-1/2 grid place-items-center group"
+                style={{ left: `${pct(anchor.at)}%` }}
+              >
+                <span
+                  className={clsx(
+                    "block rounded-full transition-all duration-150",
+                    active
+                      ? "size-[7px] bg-signal shadow-[0_0_8px_var(--color-signal)]"
+                      : "size-[5px] bg-white/35 group-hover:size-[7px] group-hover:bg-white/80",
+                  )}
+                />
+              </button>
+            );
+          })}
         </div>
 
         {/* playhead */}
@@ -231,6 +299,26 @@ export function Timeline({
           </>
         ) : null}
       </div>
+
+      {/* What sits under the pointer, drawn outside the clipped track. */}
+      {hover && hoveredLabel ? (
+        <span
+          className="pointer-events-none absolute -top-1 -translate-x-1/2 -translate-y-full inline-flex items-center gap-1.5 whitespace-nowrap rounded-md glass-deep px-2 py-1 text-[11px]"
+          style={{
+            left: Math.max(
+              70,
+              Math.min(hover.x, (track.current?.clientWidth ?? 0) - 70),
+            ),
+          }}
+        >
+          <span aria-hidden style={{ color: labelStyle(hoveredLabel.type).color }}>
+            {labelStyle(hoveredLabel.type).glyph}
+          </span>
+          <span className="text-chalk-dim max-w-[38ch] truncate">
+            {hoveredLabel.title}
+          </span>
+        </span>
+      ) : null}
     </div>
   );
 }

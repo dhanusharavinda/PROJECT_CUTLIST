@@ -1,6 +1,6 @@
 export default function Loading() {
   return (
-    <div className="lg:grid lg:grid-cols-[minmax(0,1fr)_326px] lg:h-dvh" aria-busy="true">
+    <div className="lg:grid lg:grid-cols-[minmax(0,1fr)_326px] lg:h-[calc(100dvh-3rem)]" aria-busy="true">
       <span className="sr-only">Loading project…</span>
 
       <div className="min-w-0 px-5 sm:px-8 pt-7">

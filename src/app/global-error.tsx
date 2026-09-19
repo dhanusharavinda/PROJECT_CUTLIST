@@ -57,7 +57,7 @@ export default function GlobalError({
               margin: "16px 0 0",
             }}
           >
-            This is an error outside every page — usually a bad{" "}
+            This is an error outside every page, usually a bad{" "}
             <code>.env.local</code>, most often a missing{" "}
             <code>AUTH_SECRET</code> or <code>APP_ENCRYPTION_KEY</code>. Your
             data on disk is untouched.

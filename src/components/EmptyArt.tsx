@@ -1,8 +1,8 @@
 /**
  * Line art for the empty states that matter most.
  *
- * Drawn from the same primitives the product uses — a filmstrip, a marker
- * track, a waveform — so an empty screen still says what the screen is for.
+ * Drawn from the same primitives the product uses (a filmstrip, a marker
+ * track, a waveform), so an empty screen still says what the screen is for.
  * Hairlines and one accent only; anything busier would fight the glass.
  */
 
@@ -51,7 +51,7 @@ export function FilmstripArt() {
         stroke={STROKE}
         strokeWidth="1"
       />
-      {/* one lit frame — the thing that is missing */}
+      {/* one lit frame: the thing that is missing */}
       <rect
         x="52"
         y="29"

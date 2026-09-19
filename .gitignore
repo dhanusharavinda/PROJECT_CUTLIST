@@ -12,10 +12,10 @@ next-env.d.ts
 # production
 /build
 
-# runtime data — database, uploaded media, voice notes
+# runtime data: database, uploaded media, voice notes
 /data/
 
-# env — NEVER commit real keys
+# env: NEVER commit real keys
 .env
 .env.local
 .env.*.local

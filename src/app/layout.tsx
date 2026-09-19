@@ -4,7 +4,7 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   title: {
-    default: "Cutlist — hand off an edit in the time it takes to watch it",
+    default: "Cutlist: hand off an edit in the time it takes to watch it",
     template: "%s · Cutlist",
   },
   description:

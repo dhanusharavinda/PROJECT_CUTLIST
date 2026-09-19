@@ -82,7 +82,7 @@ export const PUT = route(async (req) => {
   }
 
   if (touched.length) {
-    // Names only — a key's value must never reach the activity log.
+    // Names only; a key's value must never reach the activity log.
     logActivity({
       workspaceId: ctx.workspace.id,
       actorId: ctx.user.id,

@@ -27,6 +27,8 @@ import { CutList } from "@/components/project/CutList";
 import { Timeline } from "./Timeline";
 import { Recorder } from "./Recorder";
 import { NotesPanel } from "./NotesPanel";
+import { HelpButton } from "@/components/HelpButton";
+import { CueLayer } from "@/components/reel/CueLayer";
 
 type Panel = "notes" | "cutlist" | "room";
 
@@ -35,9 +37,15 @@ const SPEEDS = [0.5, 0.75, 1, 1.25, 1.5, 2];
 export function Walkthrough({
   initial,
   videoId,
+  initialMs = null,
+  initialNoteId = null,
 }: {
   initial: ProjectDetail;
   videoId: string;
+  /** Open the clip at this moment (from `?t=`). */
+  initialMs?: number | null;
+  /** Open with this note in focus (from `?note=`). */
+  initialNoteId?: string | null;
 }) {
   const router = useRouter();
   const toast = useToast();
@@ -57,6 +65,12 @@ export function Walkthrough({
   const [speed, setSpeed] = useState(1);
   const [panel, setPanel] = useState<Panel>("notes");
   const [activeLabelId, setActiveLabelId] = useState<string | null>(null);
+  const [activeNoteId, setActiveNoteId] = useState<string | null>(initialNoteId);
+  // A seek asked for before the player knows the clip is replayed once it does.
+  const pendingSeek = useRef<number | null>(null);
+  const [recording, setRecording] = useState(false);
+  // Measured from the file itself, so the stage never guesses 16:9.
+  const [videoRatio, setVideoRatio] = useState<number | null>(null);
   const recordTrigger = useRef<(() => void) | null>(null);
   const registerRecordTrigger = useCallback((toggleRecording: () => void) => {
     recordTrigger.current = toggleRecording;
@@ -70,6 +84,16 @@ export function Walkthrough({
     () => state.notes.filter((n) => n.video_id === videoId),
     [state.notes, videoId],
   );
+  const analysis = useMemo(
+    () => state.analyses.find((a) => a.video_id === videoId)?.payload ?? null,
+    [state.analyses, videoId],
+  );
+  /** Phone footage is 9:16, and the old fixed 16:9 box letterboxed it. */
+  const stageRatio =
+    videoRatio ??
+    (analysis && analysis.width > 0 && analysis.height > 0
+      ? analysis.width / analysis.height
+      : 16 / 9);
   const openCount = labels.filter((l) => ["open", "doing"].includes(l.status)).length;
   const labelTitles = useMemo(
     () => new Map(state.labels.map((l) => [l.id, l.title])),
@@ -77,11 +101,48 @@ export function Walkthrough({
   );
 
   const seek = useCallback((ms: number) => {
+    const target = Math.max(0, ms);
+    setCurrentMs(target);
     const el = player.current;
-    if (!el) return;
-    el.currentTime = Math.max(0, ms / 1000);
-    setCurrentMs(Math.max(0, ms));
+    if (!el || el.readyState < 1) {
+      pendingSeek.current = target;
+      return;
+    }
+    el.currentTime = target / 1000;
   }, []);
+
+  /** Jump to where a note was recorded and put it in focus in the Notes panel. */
+  const openNote = useCallback(
+    (noteId: string, ms: number, opts?: { pause?: boolean }) => {
+      setActiveNoteId(noteId);
+      setPanel("notes");
+      if (opts?.pause) player.current?.pause();
+      seek(ms);
+    },
+    [seek],
+  );
+
+  /**
+   * Pick an instruction without moving the furniture. The old behaviour flipped
+   * the side panel to the cut list, which filters to open by default and does
+   * not scroll to the row, so choosing a finished marker looked like nothing
+   * happened at all.
+   */
+  const openLabel = useCallback(
+    (labelId: string, ms: number) => {
+      setActiveLabelId(labelId);
+      seek(ms);
+    },
+    [seek],
+  );
+
+  // Arriving from a link (`?t=`, `?note=`) or switching to another clip.
+  useEffect(() => {
+    setActiveNoteId(initialNoteId);
+    if (initialNoteId) setPanel("notes");
+    const noteAt = initial.notes.find((n) => n.id === initialNoteId)?.anchor_ms;
+    seek(initialMs ?? noteAt ?? 0);
+  }, [videoId, initialMs, initialNoteId, seek]);
 
   const toggle = useCallback(() => {
     const el = player.current;
@@ -159,7 +220,15 @@ export function Walkthrough({
   // uploaded file, so the first play backfills it for everyone else.
   async function onLoadedMetadata() {
     const el = player.current;
-    if (!el || !Number.isFinite(el.duration)) return;
+    if (!el) return;
+    if (pendingSeek.current !== null) {
+      el.currentTime = pendingSeek.current / 1000;
+      pendingSeek.current = null;
+    }
+    if (el.videoWidth > 0 && el.videoHeight > 0) {
+      setVideoRatio(el.videoWidth / el.videoHeight);
+    }
+    if (!Number.isFinite(el.duration)) return;
     const ms = Math.round(el.duration * 1000);
     setDurationMs(ms);
     if (video && Math.abs(video.duration_ms - ms) > 1000) {
@@ -169,7 +238,7 @@ export function Walkthrough({
           json: { durationMs: ms },
         });
       } catch {
-        /* cosmetic — the timeline already has the right value locally */
+        /* cosmetic; the timeline already has the right value locally */
       }
     }
   }
@@ -220,6 +289,8 @@ export function Walkthrough({
               ["J / L", "±10s"],
               [", .", "frame"],
               ["R", "record"],
+              ["?", "help"],
+              ["I", "cues"],
             ].map(([key, what]) => (
               <span key={key} className="flex items-center gap-1">
                 <kbd className="rounded border border-white/12 px-1 py-px">{key}</kbd>
@@ -227,7 +298,10 @@ export function Walkthrough({
               </span>
             ))}
           </span>
-          {presence.length > 0 ? (
+          <div className="hidden lg:block">
+            <HelpButton initialTopic="notes" />
+          </div>
+          {!state.solo && presence.length > 0 ? (
             <div className="flex -space-x-1.5">
               {presence.slice(0, 4).map((person) => (
                 <Avatar
@@ -266,7 +340,7 @@ export function Walkthrough({
                   <span className="block text-[12.5px] truncate">{clip.title}</span>
                   <span className="flex items-center gap-1.5 text-[10px] text-faint mt-0.5">
                     <span className="tabular">
-                      {clip.duration_ms ? timecode(clip.duration_ms) : "—"}
+                      {clip.duration_ms ? timecode(clip.duration_ms) : "-"}
                     </span>
                     {clipLabels > 0 ? (
                       <>
@@ -318,11 +392,19 @@ export function Walkthrough({
             </nav>
           ) : null}
 
-          <div className="relative rounded-[13px] overflow-hidden bg-black border border-white/[0.07] shrink-0">
+          <div
+            className="relative mx-auto self-center rounded-[13px] overflow-hidden bg-black border border-white/[0.07] shrink-0"
+            style={{
+              aspectRatio: stageRatio,
+              height: "min(calc(100dvh - 330px), 68vh)",
+              width: "auto",
+              maxWidth: "100%",
+            }}
+          >
             <video
               ref={player}
               src={`/api/videos/${video.id}/stream`}
-              className="w-full max-h-[calc(100dvh-330px)] aspect-video object-contain bg-black"
+              className="block h-full w-full object-contain bg-black"
               onLoadedMetadata={onLoadedMetadata}
               onTimeUpdate={(e) =>
                 setCurrentMs(Math.round(e.currentTarget.currentTime * 1000))
@@ -339,9 +421,12 @@ export function Walkthrough({
               playsInline
               preload="metadata"
             />
+
+            {/* Instructions live here, one at a time, over the real picture. */}
+            <CueLayer labels={labels} currentMs={currentMs} muted={recording} />
           </div>
 
-          {/* Transport — wraps to two rows under ~560px so the scrubber keeps a
+          {/* Transport: wraps to two rows under ~560px so the scrubber keeps a
               usable width instead of squeezing the controls off screen. */}
           <div className="glass rounded-[13px] px-3 py-2.5 flex flex-wrap items-center gap-2 shrink-0">
             <button
@@ -444,12 +529,13 @@ export function Walkthrough({
               currentMs={currentMs}
               labels={labels}
               noteAnchors={notes.map((n) => ({ id: n.id, at: n.anchor_ms }))}
+              scenes={analysis?.shots.map((shot) => shot.start_ms) ?? []}
+              beats={analysis?.beats ?? []}
               onSeek={seek}
-              onPickLabel={(label) => {
-                setActiveLabelId(label.id);
-                setPanel("cutlist");
-              }}
+              onPickLabel={(label) => openLabel(label.id, label.start_ms)}
               activeLabelId={activeLabelId}
+              onPickNote={(noteId, at) => openNote(noteId, at)}
+              activeNoteId={activeNoteId}
             />
           </div>
 
@@ -459,6 +545,7 @@ export function Walkthrough({
                 projectId={state.project.id}
                 videoId={video.id}
                 getAnchorMs={() => currentMs}
+                onPhase={(phase) => setRecording(phase === "recording")}
                 sttLabel={state.ai.stt}
                 registerTrigger={registerRecordTrigger}
                 onBeforeRecord={() => player.current?.pause()}
@@ -469,7 +556,7 @@ export function Walkthrough({
                     toast(
                       count
                         ? `${count} instruction${count === 1 ? "" : "s"} added to the cut list`
-                        : "Note saved — nothing actionable was detected in it",
+                        : "Note saved. Nothing actionable was detected in it",
                       count ? "ok" : "info",
                     );
                 }}
@@ -492,7 +579,18 @@ export function Walkthrough({
                   label: <><ListChecks size={12} /> Cut list</>,
                   count: openCount,
                 },
-                { value: "room", label: <><MessagesSquare size={12} /> Room</> },
+                ...(state.solo
+                  ? []
+                  : [
+                      {
+                        value: "room" as const,
+                        label: (
+                          <>
+                            <MessagesSquare size={12} /> Room
+                          </>
+                        ),
+                      },
+                    ]),
               ]}
             />
           </div>
@@ -506,6 +604,8 @@ export function Walkthrough({
                 labels={state.labels}
                 meId={state.me.id}
                 canEdit={state.capabilities.canNote}
+                activeNoteId={activeNoteId}
+                onOpenNote={openNote}
                 onSeek={seek}
                 onChanged={refresh}
               />
@@ -522,6 +622,7 @@ export function Walkthrough({
               messages={state.messages}
               meId={state.me.id}
               activeVideoId={videoId}
+              activeLabelId={activeLabelId}
               compact
               onChanged={() => {
                 refresh();
@@ -529,7 +630,9 @@ export function Walkthrough({
               }}
               onSeek={(clipId, ms) => {
                 if (clipId && clipId !== videoId) {
-                  router.push(`/app/projects/${state.project.id}/walkthrough/${clipId}`);
+                  router.push(
+                    `/app/projects/${state.project.id}/walkthrough/${clipId}?t=${Math.round(ms)}`,
+                  );
                   return;
                 }
                 seek(ms);

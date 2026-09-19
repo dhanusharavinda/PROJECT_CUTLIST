@@ -1,3 +1,4 @@
+import { noEmDash } from "./format";
 import { id, many, now, one, run, tx } from "./db";
 import { readBuffer } from "./storage";
 import { transcribe, SttUnavailable } from "./ai/stt";
@@ -72,13 +73,13 @@ export async function transcribeNote(ctx: Ctx, note: Note): Promise<Note> {
           index,
           segment.start_ms,
           segment.end_ms,
-          segment.text,
+          noEmDash(segment.text),
           segment.confidence,
         );
       });
       run(
         "UPDATE notes SET text = ?, transcribe_status = 'done', transcribe_error = NULL, stt_provider = ? WHERE id = ? AND workspace_id = ?",
-        result.text,
+        noEmDash(result.text),
         `${result.provider}:${result.model}`,
         note.id,
         ctx.workspace.id,
@@ -152,8 +153,8 @@ export async function labelAndSave(
         note.video_id,
         note.id,
         draft.type,
-        draft.title.slice(0, 200),
-        draft.detail.slice(0, 2000),
+        noEmDash(draft.title).slice(0, 200),
+        noEmDash(draft.detail).slice(0, 2000),
         draft.start_ms,
         draft.end_ms,
         draft.priority,
@@ -177,10 +178,63 @@ export async function labelAndSave(
 }
 
 /** The whole pipeline, as triggered from the walkthrough after a recording lands. */
+// One pass per note at a time. The recorder asks for processing straight after
+// the upload and a retry can arrive while that is still running, and paying a
+// speech-to-text provider twice for the same recording is not acceptable.
+const globalForNotes = globalThis as unknown as { __cutlistNotes?: Set<string> };
+const inFlight: Set<string> = globalForNotes.__cutlistNotes ?? new Set<string>();
+globalForNotes.__cutlistNotes = inFlight;
+
+export function isProcessingNote(noteId: string): boolean {
+  return inFlight.has(noteId);
+}
+
+/** What the note looks like right now, without doing any work. */
+function snapshot(ctx: Ctx, noteId: string): ProcessResult {
+  const note = one<Note>(
+    "SELECT * FROM notes WHERE id = ? AND workspace_id = ?",
+    noteId,
+    ctx.workspace.id,
+  );
+  if (!note) throw new Error("Note not found.");
+
+  return {
+    note: {
+      ...note,
+      segments: many<TranscriptSegment>(
+        "SELECT * FROM transcript_segments WHERE note_id = ? AND workspace_id = ? ORDER BY idx",
+        noteId,
+        ctx.workspace.id,
+      ),
+    },
+    labels: many<Label>(
+      "SELECT * FROM labels WHERE note_id = ? AND workspace_id = ? ORDER BY start_ms",
+      noteId,
+      ctx.workspace.id,
+    ),
+    origin: "heuristic",
+    model: "in-progress",
+  };
+}
+
 export async function processNote(
   ctx: Ctx,
   noteId: string,
   options: { transcribe?: boolean } = {},
+): Promise<ProcessResult> {
+  if (inFlight.has(noteId)) return snapshot(ctx, noteId);
+  inFlight.add(noteId);
+  try {
+    return await runProcess(ctx, noteId, options);
+  } finally {
+    inFlight.delete(noteId);
+  }
+}
+
+async function runProcess(
+  ctx: Ctx,
+  noteId: string,
+  options: { transcribe?: boolean },
 ): Promise<ProcessResult> {
   let note = one<Note>(
     "SELECT * FROM notes WHERE id = ? AND workspace_id = ?",

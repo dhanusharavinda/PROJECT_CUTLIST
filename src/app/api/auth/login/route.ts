@@ -19,7 +19,7 @@ export const POST = route(async (req) => {
     input.email,
   );
 
-  // Same message either way — don't reveal which emails exist.
+  // Same message either way; don't reveal which emails exist.
   if (!user || !verifyPassword(input.password, user.password_hash)) {
     throw new HttpError(401, "Email or password is incorrect.");
   }

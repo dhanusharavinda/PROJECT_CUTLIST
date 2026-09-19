@@ -1,4 +1,4 @@
-import { many, one } from "./db";
+import { many, now, one, run } from "./db";
 import type { Ctx } from "./tenancy";
 import { can } from "./tenancy";
 import type {
@@ -13,6 +13,11 @@ import type {
 import { sanitiseBrief, type BriefValues } from "./brief";
 import { hasLlm } from "./ai/llm";
 import { resolveStt } from "./ai/stt";
+import { getSetting } from "./ai/keys";
+import { ffmpegStatus } from "./analysis/ffmpeg";
+import { listAnalyses, type AnalysisView } from "./analysis/store";
+import { reelView } from "./reel/store";
+import type { ReelView } from "./reel/types";
 
 /**
  * Every query in here takes `ctx.workspace.id` as its first predicate. Server
@@ -49,6 +54,14 @@ export interface ProjectDetail {
     canDelete: boolean;
   };
   ai: { stt: string | null; llm: boolean };
+  /** What ffmpeg measured about each clip in this project. */
+  analyses: AnalysisView[];
+  /** The ordered reel: which clip plays when, and for how long. */
+  reel: ReelView;
+  /** Whether footage analysis can run on this machine at all. */
+  ffmpeg: boolean;
+  /** One-person workspace: no room, no presence. */
+  solo: boolean;
 }
 
 export function listVideos(ctx: Ctx, projectId: string): Video[] {
@@ -69,7 +82,32 @@ export function listLabels(ctx: Ctx, projectId: string): Label[] {
   );
 }
 
+/**
+ * Self-heal for interrupted transcription.
+ *
+ * The recorder triggers transcription from the browser right after the upload,
+ * so a closed tab, a reload or a dropped connection used to leave a note
+ * spinning on "Transcribing" with no way out. Anything stuck far longer than a
+ * plausible run becomes a failure, which is a state the UI offers a retry from.
+ */
+function recoverStalledNotes(ctx: Ctx, projectId: string) {
+  run(
+    `UPDATE notes
+        SET transcribe_status = 'failed',
+            transcribe_error = 'Transcription was interrupted before it finished. Press retry, or type the note yourself.'
+      WHERE workspace_id = ? AND project_id = ?
+        AND ((transcribe_status = 'queued' AND created_at < ?)
+          OR (transcribe_status = 'running' AND created_at < ?))`,
+    ctx.workspace.id,
+    projectId,
+    now() - 120_000,
+    now() - 600_000,
+  );
+}
+
 export function listNotes(ctx: Ctx, projectId: string): NoteWithTranscript[] {
+  recoverStalledNotes(ctx, projectId);
+
   const notes = many<Note & { author_name: string | null }>(
     `SELECT n.*, u.name AS author_name
        FROM notes n
@@ -189,6 +227,10 @@ export function loadProjectDetail(ctx: Ctx, project: Project): ProjectDetail {
       stt: stt ? stt.provider.label : null,
       llm: hasLlm(ctx.workspace.id),
     },
+    analyses: listAnalyses(ctx, project.id),
+    reel: reelView(ctx, project.id),
+    ffmpeg: ffmpegStatus().ok,
+    solo: getSetting(ctx.workspace.id, "SOLO_MODE") === "on",
   };
 }
 

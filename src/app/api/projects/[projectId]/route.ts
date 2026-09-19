@@ -1,9 +1,10 @@
 import { z } from "zod";
 import { body, json, route } from "@/lib/api";
-import { now, run } from "@/lib/db";
-import { assert, can, getProject, requireCtx } from "@/lib/tenancy";
+import { many, now, run } from "@/lib/db";
+import { assert, can, getProject, getVideo, requireCtx } from "@/lib/tenancy";
 import { logActivity } from "@/lib/activity";
 import { loadProjectDetail } from "@/lib/queries";
+import { removeByPrefix, removeKey, removeTree } from "@/lib/storage";
 
 type Params = { params: Promise<{ projectId: string }> };
 
@@ -20,6 +21,8 @@ const Patch = z.object({
     .enum(["briefing", "editing", "review", "delivered", "archived"])
     .optional(),
   dueAt: z.number().int().nullable().optional(),
+  niche: z.enum(["gym", "aesthetic", "surreal", "vlog", "general"]).optional(),
+  referenceVideoId: z.string().min(1).nullable().optional(),
 });
 
 export const PATCH = route(async (req, { params }: Params) => {
@@ -28,6 +31,9 @@ export const PATCH = route(async (req, { params }: Params) => {
   const project = getProject(ctx, projectId);
 
   const input = Patch.parse(await body(req));
+
+  // A reference reel has to be a clip in this workspace.
+  if (input.referenceVideoId) getVideo(ctx, input.referenceVideoId);
 
   // Editors may move a project along the pipeline; only creators rename it.
   if (input.name !== undefined || input.summary !== undefined || input.dueAt !== undefined) {
@@ -41,12 +47,17 @@ export const PATCH = route(async (req, { params }: Params) => {
         SET name = COALESCE(?, name),
             summary = COALESCE(?, summary),
             status = COALESCE(?, status),
+            niche = COALESCE(?, niche),
+            reference_video_id = CASE WHEN ? THEN ? ELSE reference_video_id END,
             due_at = CASE WHEN ? THEN ? ELSE due_at END,
             updated_at = ?
       WHERE id = ? AND workspace_id = ?`,
     input.name ?? null,
     input.summary ?? null,
     input.status ?? null,
+    input.niche ?? null,
+    input.referenceVideoId !== undefined ? 1 : 0,
+    input.referenceVideoId ?? null,
     input.dueAt !== undefined ? 1 : 0,
     input.dueAt ?? null,
     now(),
@@ -73,11 +84,50 @@ export const DELETE = route(async (_req, { params }: Params) => {
   const project = getProject(ctx, projectId);
   assert(can.createProject(ctx.role), "Only owners and creators can delete a project.");
 
+  // Rows cascade, files do not. Everything this project owns on disk has to be
+  // gathered before the delete, because afterwards there is nothing to ask.
+  const media = many<{ storage_key: string | null; proxy_key: string | null; id: string }>(
+    "SELECT id, storage_key, proxy_key FROM videos WHERE workspace_id = ? AND project_id = ?",
+    ctx.workspace.id,
+    projectId,
+  );
+  const frames = many<{ storage_key: string }>(
+    `SELECT f.storage_key FROM analysis_frames f
+       JOIN videos v ON v.id = f.video_id AND v.workspace_id = f.workspace_id
+      WHERE f.workspace_id = ? AND v.project_id = ?`,
+    ctx.workspace.id,
+    projectId,
+  );
+  const recordings = many<{ audio_key: string }>(
+    `SELECT audio_key FROM notes
+      WHERE workspace_id = ? AND project_id = ? AND audio_key IS NOT NULL`,
+    ctx.workspace.id,
+    projectId,
+  );
+
   run(
     "DELETE FROM projects WHERE id = ? AND workspace_id = ?",
     projectId,
     ctx.workspace.id,
   );
+
+  const keys = [
+    ...media.flatMap((row) => [row.storage_key, row.proxy_key]),
+    ...frames.map((row) => row.storage_key),
+    ...recordings.map((row) => row.audio_key),
+  ].filter((key): key is string => Boolean(key));
+
+  await Promise.all(keys.map((key) => removeKey(key).catch(() => {})));
+  await Promise.all(
+    media.map((row) =>
+      removeTree(`${ctx.workspace.id}/analysis/${row.id}`).catch(() => {}),
+    ),
+  );
+  await removeByPrefix(
+    `${ctx.workspace.id}/packet`,
+    media.map((row) => row.id),
+  ).catch(() => {});
+
   logActivity({
     workspaceId: ctx.workspace.id,
     actorId: ctx.user.id,

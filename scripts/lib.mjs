@@ -6,8 +6,8 @@ import { DatabaseSync } from "node:sqlite";
 /**
  * Shared plumbing for the CLI scripts.
  *
- * The migrations are imported straight from `src/lib/schema.ts` — Node 24
- * strips the types — so there is exactly one definition of the schema and the
+ * The migrations are imported straight from `src/lib/schema.ts` (Node 24
+ * strips the types), so there is exactly one definition of the schema and the
  * scripts can never drift from the app.
  */
 
@@ -21,7 +21,7 @@ export function dbPath() {
   return path.join(dataDir(), "cutlist.db");
 }
 
-/** Minimal .env.local reader — the scripts run outside Next, which loads it for us. */
+/** Minimal .env.local reader. The scripts run outside Next, which loads it for us. */
 export function readEnv() {
   const out = { ...process.env };
   for (const file of [".env.local", ".env"]) {
@@ -62,7 +62,7 @@ export async function openDb() {
   return db;
 }
 
-/** Same format as src/lib/crypto.ts — the app must be able to verify these. */
+/** Same format as src/lib/crypto.ts; the app must be able to verify these. */
 export function hashPassword(password) {
   const salt = randomBytes(16);
   const derived = scryptSync(password.normalize("NFKC"), salt, 64, {

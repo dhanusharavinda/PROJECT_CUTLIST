@@ -19,7 +19,7 @@ export interface LabelInput {
   /** Video length, so "at the end" resolves to something real. */
   durationMs: number;
   videoTitle?: string;
-  /** The creator's brief, if filled in — steers the AI pass. */
+  /** The creator's brief, if filled in; steers the AI pass. */
   brief?: Record<string, unknown> | null;
 }
 
@@ -116,7 +116,7 @@ const NUMBER_WORDS: Record<string, number> = {
 
 /**
  * Pull an absolute timestamp out of a phrase.
- * Returns null when the creator spoke relatively ("right here") — the caller
+ * Returns null when the creator spoke relatively ("right here"); the caller
  * then falls back to the playhead anchor, which is what they meant anyway.
  */
 export function extractTimestamp(
@@ -177,7 +177,7 @@ function splitInstructions(text: string): string[] {
 
 /**
  * The type is already shown as a chip everywhere a title appears, so the title
- * is just the creator's own words, tidied — no "Cut — " prefix repeating it.
+ * is just the creator's own words, tidied, with no "Cut: " prefix repeating it.
  */
 function titleFor(phrase: string): string {
   const cleaned = phrase
@@ -287,11 +287,13 @@ Rules for timestamps:
 - Only set end_ms when a range was actually described ("from 1:10 to 1:25", "the next ten seconds"). Otherwise null.
 - Never exceed the video duration you are given.
 
-Output shape — a JSON object:
+Output shape, a JSON object:
 {"labels":[{"type":"cut","title":"short imperative under 70 chars","detail":"what the editor should actually do, in one or two sentences","start_ms":135000,"end_ms":null,"priority":"low|normal|high","confidence":0.0-1.0}]}
 
 priority: "high" if the creator stressed it ("make sure", "definitely"), "low" if optional ("maybe", "if you have time"), otherwise "normal".
-confidence: how sure you are this is a real instruction correctly placed in time.`;
+confidence: how sure you are this is a real instruction correctly placed in time.
+
+Write titles and details with plain punctuation. Never use em dashes.`;
 
 export async function aiLabels(
   workspaceId: string,
@@ -377,7 +379,7 @@ function clampMs(value: unknown, fallback: number, ceiling: number): number {
 
 /**
  * Label a note: AI when a key exists, heuristics otherwise or on failure.
- * Never throws — a labelling failure must not lose the creator's note.
+ * Never throws; a labelling failure must not lose the creator's note.
  */
 export async function labelNote(
   workspaceId: string,

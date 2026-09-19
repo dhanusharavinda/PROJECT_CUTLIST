@@ -7,7 +7,7 @@ import { decryptSecret, encryptSecret, keyHint } from "../crypto";
  * The product intent is that a creator pastes their own key into
  * Settings → AI providers; the env vars only exist so a developer can run the
  * app without touching the UI. A workspace can never read another workspace's
- * key — the row is keyed by (workspace_id, key) and always fetched with both.
+ * key: the row is keyed by (workspace_id, key) and always fetched with both.
  */
 
 export const SECRET_KEYS = [
@@ -27,8 +27,7 @@ export const SETTING_KEYS = [
   "STT_MODEL",
   "LLM_PROVIDER",
   "LLM_MODEL",
-  "AUTO_LABEL",
-  "AUTO_TRANSCRIBE",
+  "SOLO_MODE",
 ] as const;
 
 export type SettingKey = (typeof SETTING_KEYS)[number];
@@ -82,7 +81,7 @@ export function deleteSecret(workspaceId: string, key: SecretKey) {
   );
 }
 
-/** Hints only — the plaintext never leaves the server. */
+/** Hints only; the plaintext never leaves the server. */
 export function listSecretHints(workspaceId: string) {
   const rows = many<{ key: string; hint: string; updated_at: number }>(
     "SELECT key, hint, updated_at FROM workspace_secrets WHERE workspace_id = ?",

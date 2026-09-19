@@ -19,16 +19,20 @@ export const GET = route(async () => {
     ctx.workspace.id,
   );
 
-  const invites = many<{
-    id: string;
-    email: string;
-    role: string;
-    token: string;
-    created_at: number;
-  }>(
-    "SELECT id, email, role, token, created_at FROM invites WHERE workspace_id = ? AND accepted_at IS NULL ORDER BY created_at DESC",
-    ctx.workspace.id,
-  );
+  // An invite token is a credential: redeeming one grants membership at the
+  // role it was issued for. Only the people who can manage members see them.
+  const invites = can.manageMembers(ctx.role)
+    ? many<{
+        id: string;
+        email: string;
+        role: string;
+        token: string;
+        created_at: number;
+      }>(
+        "SELECT id, email, role, token, created_at FROM invites WHERE workspace_id = ? AND accepted_at IS NULL ORDER BY created_at DESC",
+        ctx.workspace.id,
+      )
+    : [];
 
   return json({ members, invites, role: ctx.role });
 });

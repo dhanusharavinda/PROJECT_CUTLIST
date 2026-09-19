@@ -58,7 +58,7 @@ export function NewProjectButton({
         open={open}
         onClose={() => setOpen(false)}
         title="Start a project"
-        description="A project holds the footage, the brief, every note and the cut list for one video — or one batch of them."
+        description="A project holds the footage, the brief, every note and the cut list for one video, or one batch of them."
         width={480}
       >
         <form onSubmit={create} className="space-y-4">
@@ -67,7 +67,7 @@ export function NewProjectButton({
               autoFocus
               required
               className="field"
-              placeholder="Ep. 42 — the studio tour"
+              placeholder="Ep. 42: the studio tour"
               value={name}
               onChange={(e) => setName(e.target.value)}
             />

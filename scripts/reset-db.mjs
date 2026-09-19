@@ -3,7 +3,7 @@ import path from "node:path";
 import { dataDir } from "./lib.mjs";
 
 /**
- * Wipes the database and every uploaded file. Destructive on purpose — this is
+ * Wipes the database and every uploaded file. Destructive on purpose: this is
  * the "start over" button while developing.
  */
 
@@ -11,7 +11,7 @@ const dir = dataDir();
 const force = process.argv.includes("--yes") || process.argv.includes("-y");
 
 if (!fs.existsSync(dir)) {
-  console.log(`Nothing to remove — ${dir} does not exist.`);
+  console.log(`Nothing to remove: ${dir} does not exist.`);
   process.exit(0);
 }
 

@@ -113,7 +113,7 @@ export function ReviewPanel({
           <Empty
             icon={<Sparkles size={17} />}
             title="No review yet"
-            hint="Run it once the brief is filled in and you've recorded a few notes — that's when it has something to say."
+            hint="Run it once the brief is filled in and you've recorded a few notes. That's when it has something to say."
           />
         </div>
       ) : (

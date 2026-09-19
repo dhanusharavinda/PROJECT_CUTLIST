@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import clsx from "clsx";
 import {
   Check,
@@ -39,6 +39,7 @@ export function CutList({
   onChanged,
   onSeek,
   activeVideoId,
+  activeLabelId,
   compact,
   messages = [],
   meId,
@@ -52,8 +53,10 @@ export function CutList({
   onSeek?: (videoId: string | null, ms: number) => void;
   /** When set, only this clip's instructions are shown. */
   activeVideoId?: string | null;
+  /** The instruction the player is sitting on: always shown, always in view. */
+  activeLabelId?: string | null;
   compact?: boolean;
-  /** Room messages — the ones pinned to an instruction surface on its row. */
+  /** Room messages: the ones pinned to an instruction surface on its row. */
   messages?: MessageWithAuthor[];
   meId?: string;
   canChat?: boolean;
@@ -95,6 +98,9 @@ export function CutList({
   const visible = useMemo(
     () =>
       scoped.filter((label) => {
+        // Whatever the filter says, the instruction the player is sitting on
+        // stays visible, or picking a finished marker looks like nothing.
+        if (label.id === activeLabelId) return true;
         if (status === "open" && !["open", "doing"].includes(label.status))
           return false;
         if (status === "done" && !["done", "skipped"].includes(label.status))
@@ -102,7 +108,7 @@ export function CutList({
         if (types.size && !types.has(label.type)) return false;
         return true;
       }),
-    [scoped, status, types],
+    [scoped, status, types, activeLabelId],
   );
 
   const presentTypes = useMemo(() => {
@@ -245,6 +251,7 @@ export function CutList({
                 label={label}
                 clip={label.video_id ? titleById.get(label.video_id) : null}
                 showClip={activeVideoId === undefined && videos.length > 1}
+                active={label.id === activeLabelId}
                 canEdit={canEdit}
                 canChat={canChat}
                 meId={meId}
@@ -282,6 +289,7 @@ function Row({
   label,
   clip,
   showClip,
+  active,
   canEdit,
   canChat,
   meId,
@@ -297,6 +305,7 @@ function Row({
   label: Label;
   clip?: string | null;
   showClip: boolean;
+  active?: boolean;
   canEdit: boolean;
   canChat: boolean;
   meId?: string;
@@ -317,7 +326,7 @@ function Row({
   const finished = label.status === "done" || label.status === "skipped";
   const hasDetail = Boolean(label.detail && label.detail !== label.title);
 
-  // Someone asked and nobody else has replied since — that is what needs
+  // Someone asked and nobody else has replied since; that is what needs
   // the creator's attention, so it is what the row shouts about.
   const awaitingReply =
     thread.length > 0 &&
@@ -353,13 +362,24 @@ function Row({
     }
   }
 
+  const row = useRef<HTMLLIElement>(null);
+
+  // Picked from the timeline or the overlay: bring the row to the reader.
+  useEffect(() => {
+    if (active) row.current?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+  }, [active]);
+
   return (
     <li
+      ref={row}
+      aria-current={active ? "true" : undefined}
       className={clsx(
-        "rounded-[11px] border transition-colors group",
-        finished
-          ? "border-white/[0.04] bg-white/[0.012]"
-          : "border-white/[0.07] bg-white/[0.028] hover:bg-white/[0.05]",
+        "rounded-[11px] border transition-colors group scroll-my-2",
+        active
+          ? "border-signal/45 bg-signal/[0.06]"
+          : finished
+            ? "border-white/[0.04] bg-white/[0.012]"
+            : "border-white/[0.07] bg-white/[0.028] hover:bg-white/[0.05]",
       )}
       style={
         !finished && label.priority === "high"
@@ -418,7 +438,7 @@ function Row({
             {label.origin === "heuristic" ? (
               <span
                 className="text-[10px] text-faint"
-                title="Extracted by keyword rules — no language model was connected"
+                title="Extracted by keyword rules, no language model was connected"
               >
                 rules
               </span>

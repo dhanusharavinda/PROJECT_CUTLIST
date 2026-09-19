@@ -13,7 +13,7 @@ const db = await openDb();
 
 if (db.prepare("SELECT id FROM users LIMIT 1").get()) {
   console.log(
-    "The database already has users — seeding would collide with them.\n" +
+    "The database already has users, and seeding would collide with them.\n" +
       "Start clean with:  npm run db:reset -- --yes  &&  npm run seed",
   );
   process.exit(1);
@@ -81,7 +81,7 @@ insert(
    VALUES (?,?,?,?,?,?,?,?,?)`,
   project,
   workspace,
-  "Ep. 42 — Building a studio in a spare room",
+  "Ep. 42: Building a studio in a spare room",
   "Long-form YouTube with a vertical cut for Shorts. Second time we've filmed this room, so match the last one.",
   "editing",
   t + 1000 * 60 * 60 * 24 * 6,
@@ -98,16 +98,16 @@ const brief = {
   pacing: "Fast and punchy",
   tone: ["Educational", "Raw and authentic"],
   references:
-    "https://youtu.be/example — I want the b-roll rhythm from this, cuts landing on the beat",
+    "https://youtu.be/example (I want the b-roll rhythm from this, cuts landing on the beat)",
   captions: "Burned-in, styled",
   music: "Lo-fi under the build montage, nothing under the talking sections",
-  musicSource: "Epidemic Sound — login in the shared drive",
-  brollSource: "Drive folder 'Studio build — b-roll'",
+  musicSource: "Epidemic Sound (login in the shared drive)",
+  brollSource: "Drive folder 'Studio build - b-roll'",
   branding:
     "Lower third: Inter Semibold, #D6F55E on 60% black.\nIntro sting: /branding/northlight-sting.mov\nNo logo bug over the demos.",
   doNots:
     "No zoom effects during the intro\nNever cut mid-sentence\nDon't use the shot where the tripod is in frame",
-  mustKeep: "The bit where the shelf collapses — that's the whole video.",
+  mustKeep: "The bit where the shelf collapses. That's the whole video.",
   sensitive: "Any parcel or envelope on the shelf (address is visible)",
   deliverables: ["Master export", "Vertical cut", "Thumbnail frames", "Caption file (.srt)"],
   deadline: new Date(t + 1000 * 60 * 60 * 24 * 6).toISOString().slice(0, 10),
@@ -129,7 +129,7 @@ insert(
 //
 // A real, playable five-minute media file, synthesised here rather than
 // downloaded. Encoding actual video would need ffmpeg; a WAV needs nothing but
-// a header and a loop, and a <video> element plays it happily — so the player,
+// a header and a loop, and a <video> element plays it happily, so the player,
 // the scrubber and the timeline are all genuinely live on a fresh install with
 // no network at all. Replace it with your own upload; it exists to be deleted.
 
@@ -148,7 +148,7 @@ insert(
   video,
   workspace,
   project,
-  "Ep 42 — scratch assembly (placeholder)",
+  "Ep 42: scratch assembly (placeholder)",
   "upload",
   storageKey,
   null,
@@ -162,7 +162,7 @@ insert(
   ago(60 * 25),
 );
 
-/** 8 kHz 8-bit mono PCM — a slow drifting tone, so the scrubber has something real to move over. */
+/** 8 kHz 8-bit mono PCM: a slow drifting tone, so the scrubber has something real to move over. */
 function renderScratchTrack(seconds, sampleRate = 8000) {
   const samples = seconds * sampleRate;
   const buf = Buffer.alloc(44 + samples);
@@ -196,9 +196,9 @@ const NOTES = [
   {
     anchor: 12_000,
     at: ago(120),
-    text: "Okay so right at the start here, cut this whole intro ramble — it drags and nobody needs it. Jump straight to me walking into the room. And make sure the captions are burned in this time, the last one went out without them.",
+    text: "Okay so right at the start here, cut this whole intro ramble, it drags and nobody needs it. Jump straight to me walking into the room. And make sure the captions are burned in this time, the last one went out without them.",
     segments: [
-      [0, 4200, "Okay so right at the start here, cut this whole intro ramble —"],
+      [0, 4200, "Okay so right at the start here, cut this whole intro ramble,"],
       [4200, 7100, "it drags and nobody needs it."],
       [7100, 10_400, "Jump straight to me walking into the room."],
       [10_400, 15_800, "And make sure the captions are burned in this time, the last one went out without them."],
@@ -216,9 +216,9 @@ const NOTES = [
   {
     anchor: 240_000,
     at: ago(44),
-    text: "Around four minutes the colour goes really warm because the lamp is on — pull that back to match the rest of the video. Also blur the parcel on the shelf, my address is on it. Maybe add some low lo-fi under this section if you have time.",
+    text: "Around four minutes the colour goes really warm because the lamp is on, pull that back to match the rest of the video. Also blur the parcel on the shelf, my address is on it. Maybe add some low lo-fi under this section if you have time.",
     segments: [
-      [0, 6400, "Around four minutes the colour goes really warm because the lamp is on —"],
+      [0, 6400, "Around four minutes the colour goes really warm because the lamp is on,"],
       [6400, 9800, "pull that back to match the rest of the video."],
       [9800, 14_100, "Also blur the parcel on the shelf, my address is on it."],
       [14_100, 19_600, "Maybe add some low lo-fi under this section if you have time."],
@@ -269,10 +269,10 @@ const LABELS = [
   [0, "cut", "Cut the intro ramble", "Straight into Ada walking into the room. The talking before that goes entirely.", 8000, null, "high", "done"],
   [0, "caption", "Burn in styled captions across the whole cut", "Last episode shipped without them. Inter Semibold, #D6F55E on 60% black per the brief.", 0, null, "high", "doing"],
   [1, "transition", "Whoosh transition into the desk-build b-roll", "At 1:38, going into the b-roll from the 'Studio build' Drive folder.", 98_000, null, "normal", "open"],
-  [1, "zoom", "Punch in on 'this is the bit everyone gets wrong'", "Subtle — the brief says no zoom in the intro, but this is mid-video and the line carries the section.", 101_000, 106_000, "normal", "open"],
+  [1, "zoom", "Punch in on 'this is the bit everyone gets wrong'", "Subtle. The brief says no zoom in the intro, but this is mid-video and the line carries the section.", 101_000, 106_000, "normal", "open"],
   [2, "color", "Pull back the warm cast from the practical lamp", "Around 4:00 the desk lamp pushes everything orange. Match it to the rest of the timeline.", 240_000, 268_000, "normal", "open"],
   [2, "blur", "Blur the parcel on the shelf", "Ada's home address is legible on it. This one is non-negotiable.", 244_000, null, "high", "open"],
-  [2, "music", "Low lo-fi bed under this section", "Marked optional — 'if you have time'. Epidemic Sound, nothing under the talking.", 240_000, null, "low", "open"],
+  [2, "music", "Low lo-fi bed under this section", "Marked optional: 'if you have time'. Epidemic Sound, nothing under the talking.", 240_000, null, "low", "open"],
 ];
 
 const labelIds = {};
@@ -306,7 +306,7 @@ for (const [noteIndex, type, title, detail, start, end, priority, status] of LAB
 // ── The room ────────────────────────────────────────────────────────────────
 
 // The middle two are pinned to the zoom instruction rather than floating in the
-// room — that is the shape the product is actually for: the question lives on
+// room; that is the shape the product is actually for: the question lives on
 // the thing it is about, so nobody re-describes which moment they mean.
 const pinnedToZoom = {
   labelId: labelIds.zoom,
@@ -315,10 +315,10 @@ const pinnedToZoom = {
 };
 
 const CHAT = [
-  [theo, "text", "Got the brief, thanks — the 'must keep' on the shelf collapse is helpful, I'd have trimmed it.", ago(90), null],
+  [theo, "text", "Got the brief, thanks, the 'must keep' on the shelf collapse is helpful, I'd have trimmed it.", ago(90), null],
   [ada, "text", "Ha, that's the entire reason the video exists. Leave every frame of it.", ago(88), null],
   [theo, "text", "How hard is this punch-in? The brief says no zooms in the intro and I don't want to overdo it here.", ago(40), pinnedToZoom],
-  [ada, "text", "Gentle — 10% over about half a second, ease out. Same as ep 39.", ago(36), pinnedToZoom],
+  [ada, "text", "Gentle: 10% over about half a second, ease out. Same as ep 39.", ago(36), pinnedToZoom],
   [theo, "text", "Perfect. Colour pass and the blur are done first, I'll push a v1 tomorrow morning.", ago(34), null],
 ];
 
@@ -337,9 +337,9 @@ for (const [author, kind, bodyText, at, meta] of CHAT) {
 }
 
 const ACTIVITY = [
-  ["project.created", "Ep. 42 — Building a studio in a spare room created", ago(60 * 26)],
+  ["project.created", "Ep. 42: Building a studio in a spare room created", ago(60 * 26)],
   ["brief.updated", "Brief for Ep. 42 is 100% complete", ago(60 * 25)],
-  ["video.added", "Ep 42 — scratch assembly attached", ago(60 * 25)],
+  ["video.added", "Ep 42: scratch assembly attached", ago(60 * 25)],
   ["note.recorded", "Ada Okafor recorded a note on Ep. 42", ago(120)],
   ["labels.extracted", "2 instructions extracted from a note", ago(119)],
   ["note.recorded", "Ada Okafor recorded a note on Ep. 42", ago(96)],
@@ -367,7 +367,7 @@ Seeded the "Northlight" workspace.
   Creator   ada@cutlist.local    ${PASSWORD}
   Editor    theo@cutlist.local   ${PASSWORD}
 
-Sign in as either — the editor sees a read-only brief and a working cut list.
+Sign in as either. The editor sees a read-only brief and a working cut list.
 The attached clip is a generated five-minute placeholder so the player and the
 timeline are live straight away. Delete it and upload real footage.
 `);

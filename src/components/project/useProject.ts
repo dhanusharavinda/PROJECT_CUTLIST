@@ -13,7 +13,7 @@ export interface Presence {
  *
  * Chat messages are applied directly because they arrive constantly and their
  * payload is complete. Everything else (a note transcribed, a label ticked, the
- * brief edited) triggers a debounced refetch of the whole project — the payload
+ * brief edited) triggers a debounced refetch of the whole project; the payload
  * is small, and it keeps merge logic out of the client entirely.
  */
 export type Connection = "connecting" | "live" | "down";
@@ -98,7 +98,7 @@ export function useProject(initial: ProjectDetail) {
       }
     });
 
-    for (const type of ["note", "label", "video", "brief", "suggestion"]) {
+    for (const type of ["note", "label", "video", "brief", "suggestion", "reel"]) {
       source.addEventListener(type, scheduleRefresh);
     }
 

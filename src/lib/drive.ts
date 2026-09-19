@@ -107,7 +107,7 @@ export function saveConnection(
     workspaceId,
   );
 
-  // Google omits refresh_token on re-consent in some flows — keep the old one.
+  // Google omits refresh_token on re-consent in some flows; keep the old one.
   const refreshEnc = tokens.refresh_token
     ? encryptSecret(tokens.refresh_token)
     : (existing?.refresh_enc ?? null);
@@ -164,7 +164,7 @@ export function disconnect(workspaceId: string) {
   if (conn?.refresh_enc) {
     const token = decryptSecret(conn.refresh_enc);
     if (token) {
-      // Best effort — the row goes regardless.
+      // Best effort; the row goes regardless.
       void fetch(REVOKE_ENDPOINT, {
         method: "POST",
         headers: { "Content-Type": "application/x-www-form-urlencoded" },
@@ -225,6 +225,8 @@ export interface DriveFile {
   mimeType: string;
   size: number;
   durationMs: number;
+  /** Folder ids. One shoot in one folder is the whole identity story. */
+  parents?: string[];
   thumbnailLink?: string;
   webViewLink?: string;
   modifiedTime?: string;
@@ -250,7 +252,7 @@ export async function listVideos(
   url.searchParams.set("orderBy", "modifiedTime desc");
   url.searchParams.set(
     "fields",
-    "nextPageToken, files(id, name, mimeType, size, thumbnailLink, webViewLink, modifiedTime, videoMediaMetadata(durationMillis))",
+    "nextPageToken, files(id, name, mimeType, size, thumbnailLink, webViewLink, modifiedTime, parents, videoMediaMetadata(durationMillis))",
   );
   url.searchParams.set("supportsAllDrives", "true");
   url.searchParams.set("includeItemsFromAllDrives", "true");
@@ -272,6 +274,7 @@ export async function listVideos(
       thumbnailLink?: string;
       webViewLink?: string;
       modifiedTime?: string;
+      parents?: string[];
       videoMediaMetadata?: { durationMillis?: string };
     }[];
   };
@@ -287,11 +290,150 @@ export async function listVideos(
       thumbnailLink: f.thumbnailLink,
       webViewLink: f.webViewLink,
       modifiedTime: f.modifiedTime,
+      parents: f.parents ?? [],
     })),
   };
 }
 
-/** Streams file bytes straight from Drive — used to serve imported clips. */
+export interface DriveFolder {
+  id: string;
+  name: string;
+  webViewLink?: string;
+  modifiedTime?: string;
+}
+
+/** Quote a value for a Drive query string, which uses backslash escaping. */
+function quoted(value: string): string {
+  return value.replace(/\\/g, "\\\\").replace(/'/g, "\\'");
+}
+
+/**
+ * Folders, so the picker can be folder-first. One shoot is one folder is one
+ * reel, which is what keeps the clip the editor opens and the clip named in the
+ * handoff the same file.
+ */
+export async function listFolders(
+  workspaceId: string,
+  options: { parentId?: string; search?: string; pageToken?: string } = {},
+): Promise<{ folders: DriveFolder[]; nextPageToken?: string }> {
+  const token = await accessToken(workspaceId);
+
+  const clauses = [
+    "mimeType = 'application/vnd.google-apps.folder'",
+    "trashed = false",
+  ];
+  if (options.search) clauses.push(`name contains '${quoted(options.search)}'`);
+  else clauses.push(`'${quoted(options.parentId || "root")}' in parents`);
+
+  const url = new URL("https://www.googleapis.com/drive/v3/files");
+  url.searchParams.set("q", clauses.join(" and "));
+  url.searchParams.set("pageSize", "60");
+  url.searchParams.set("orderBy", "folder, modifiedTime desc");
+  url.searchParams.set(
+    "fields",
+    "nextPageToken, files(id, name, webViewLink, modifiedTime)",
+  );
+  url.searchParams.set("supportsAllDrives", "true");
+  url.searchParams.set("includeItemsFromAllDrives", "true");
+  if (options.pageToken) url.searchParams.set("pageToken", options.pageToken);
+
+  const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+  if (!res.ok)
+    throw new DriveError(
+      `Drive folder listing failed (${res.status}): ${(await res.text()).slice(0, 200)}`,
+    );
+
+  const data = (await res.json()) as {
+    nextPageToken?: string;
+    files?: DriveFolder[];
+  };
+  return { folders: data.files ?? [], nextPageToken: data.nextPageToken };
+}
+
+/** One file's identity: the name the editor sees, its size, and its link. */
+export async function getFile(
+  workspaceId: string,
+  fileId: string,
+): Promise<DriveFile> {
+  const token = await accessToken(workspaceId);
+  const url = new URL(
+    `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(fileId)}`,
+  );
+  url.searchParams.set(
+    "fields",
+    "id, name, mimeType, size, thumbnailLink, webViewLink, modifiedTime, parents, videoMediaMetadata(durationMillis)",
+  );
+  url.searchParams.set("supportsAllDrives", "true");
+
+  const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+  if (!res.ok)
+    throw new DriveError(
+      res.status === 404
+        ? "That file is no longer in the connected Drive account. It may have been moved, renamed into another account, or trashed."
+        : `Drive could not describe that file (${res.status}).`,
+    );
+
+  const f = (await res.json()) as {
+    id: string;
+    name: string;
+    mimeType: string;
+    size?: string;
+    thumbnailLink?: string;
+    webViewLink?: string;
+    modifiedTime?: string;
+    parents?: string[];
+    videoMediaMetadata?: { durationMillis?: string };
+  };
+
+  return {
+    id: f.id,
+    name: f.name,
+    mimeType: f.mimeType,
+    size: Number(f.size ?? 0),
+    durationMs: Number(f.videoMediaMetadata?.durationMillis ?? 0),
+    thumbnailLink: f.thumbnailLink,
+    webViewLink: f.webViewLink,
+    modifiedTime: f.modifiedTime,
+    parents: f.parents ?? [],
+  };
+}
+
+/**
+ * Google's own thumbnail bytes. The link it hands back needs the workspace
+ * token, which the browser does not have, so it is proxied.
+ */
+export async function thumbnail(
+  workspaceId: string,
+  fileId: string,
+): Promise<{ bytes: Buffer; mime: string } | null> {
+  const token = await accessToken(workspaceId);
+  const meta = new URL(
+    `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(fileId)}`,
+  );
+  meta.searchParams.set("fields", "thumbnailLink");
+  meta.searchParams.set("supportsAllDrives", "true");
+
+  const metaRes = await fetch(meta, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!metaRes.ok) return null;
+
+  const link = ((await metaRes.json()) as { thumbnailLink?: string }).thumbnailLink;
+  if (!link) return null;
+
+  // The default crop is tiny; ask for something a person can tell apart.
+  const res = await fetch(link.replace(/=s\d+$/, "=s400"), {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) return null;
+
+  return {
+    bytes: Buffer.from(await res.arrayBuffer()),
+    mime: res.headers.get("content-type") ?? "image/jpeg",
+  };
+}
+
+/** Streams file bytes straight from Drive, used to serve imported clips. */
 export async function streamFile(
   workspaceId: string,
   fileId: string,

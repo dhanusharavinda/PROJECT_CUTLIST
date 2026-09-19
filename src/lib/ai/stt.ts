@@ -49,7 +49,7 @@ export const STT_PROVIDERS = [
     label: "AssemblyAI",
     secret: "ASSEMBLYAI_API_KEY" as SecretKey,
     defaultModel: "best",
-    note: "Async — Cutlist polls until the transcript is ready.",
+    note: "Async. Cutlist polls until the transcript is ready.",
   },
 ] as const;
 

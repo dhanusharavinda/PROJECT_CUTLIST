@@ -1,3 +1,4 @@
+import { HelpButton } from "@/components/HelpButton";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { currentUser } from "@/lib/auth";
@@ -11,7 +12,7 @@ export default async function AuthLayout({
 
   return (
     <div className="min-h-dvh grid lg:grid-cols-[1.05fr_1fr]">
-      {/* Editorial side — carries the identity so the form can stay silent. */}
+      {/* Editorial side: carries the identity so the form can stay silent. */}
       <aside className="hidden lg:flex flex-col justify-between p-12 relative overflow-hidden">
         <div className="absolute inset-0 -z-10 bg-[radial-gradient(46rem_34rem_at_18%_12%,rgba(214,245,94,.075),transparent_62%),radial-gradient(40rem_30rem_at_82%_88%,rgba(120,190,255,.08),transparent_60%)]" />
 
@@ -31,7 +32,7 @@ export default async function AuthLayout({
           </p>
           <p className="text-[14px] text-mute mt-6 leading-relaxed max-w-[42ch]">
             Talk over your footage. Cutlist transcribes it, works out which
-            instruction it was, and pins it to the frame — so the handoff is a
+            instruction it was, and pins it to the frame, so the handoff is a
             cut list, not a wall of text.
           </p>
         </div>
@@ -45,7 +46,10 @@ export default async function AuthLayout({
         </div>
       </aside>
 
-      <main className="flex items-center justify-center p-6 sm:p-10">
+      <main className="relative flex items-center justify-center p-6 pt-16 sm:p-10">
+        <div className="absolute top-4 right-4 sm:top-6 sm:right-6">
+          <HelpButton audience="public" />
+        </div>
         <div className="w-full max-w-[380px]">{children}</div>
       </main>
     </div>

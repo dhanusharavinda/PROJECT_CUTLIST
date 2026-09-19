@@ -113,7 +113,7 @@ export function decryptSecret(payload: string): string | null {
   }
 }
 
-/** `sk-…4f2a` — enough to recognise a key without revealing it. */
+/** `sk-…4f2a`: enough to recognise a key without revealing it. */
 export function keyHint(secret: string): string {
   const trimmed = secret.trim();
   if (trimmed.length <= 8) return "•".repeat(trimmed.length);

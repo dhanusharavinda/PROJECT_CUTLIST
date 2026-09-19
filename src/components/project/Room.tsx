@@ -42,7 +42,7 @@ export function Room({
   const scroller = useRef<HTMLDivElement>(null);
   const stickToBottom = useRef(true);
 
-  // Only auto-scroll when the reader is already at the bottom — otherwise
+  // Only auto-scroll when the reader is already at the bottom; otherwise
   // a new message yanks them away from what they were reading.
   useEffect(() => {
     const el = scroller.current;

@@ -6,6 +6,9 @@ import { driveConfigured, getConnection } from "@/lib/drive";
 import { listMembers } from "@/lib/queries";
 import { many } from "@/lib/db";
 import { SettingsView } from "@/components/settings/SettingsView";
+import { WorkspaceModes } from "@/components/settings/WorkspaceModes";
+import { ffmpegStatus } from "@/lib/analysis/ffmpeg";
+import { getSetting } from "@/lib/ai/keys";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Settings" };
@@ -30,8 +33,11 @@ export default async function SettingsPage({
       )
     : [];
 
+  const ffmpeg = ffmpegStatus();
+
   return (
-    <SettingsView
+    <>
+      <SettingsView
       workspace={{ id: ctx.workspace.id, name: ctx.workspace.name, slug: ctx.workspace.slug }}
       role={ctx.role}
       me={ctx.user.id}
@@ -51,6 +57,14 @@ export default async function SettingsPage({
       members={listMembers(ctx)}
       invites={invites}
       flash={params.drive ? { status: params.drive, detail: params.detail } : null}
-    />
+      />
+      <div className="px-5 sm:px-8 pb-12 max-w-[980px]">
+        <WorkspaceModes
+          solo={getSetting(ctx.workspace.id, "SOLO_MODE") === "on"}
+          ffmpeg={{ ok: ffmpeg.ok, hint: ffmpeg.hint }}
+          canManage={can.manageSecrets(ctx.role)}
+        />
+      </div>
+    </>
   );
 }

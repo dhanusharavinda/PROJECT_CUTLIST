@@ -9,7 +9,7 @@ type Params = { params: Promise<{ noteId: string }> };
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-/** Plays back the original recording — useful when the transcript is wrong. */
+/** Plays back the original recording. Useful when the transcript is wrong. */
 export const GET = route(async (_req, { params }: Params) => {
   const ctx = await requireCtx();
   const { noteId } = await params;

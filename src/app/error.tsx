@@ -5,7 +5,7 @@ import { FallbackLink, FullPageState } from "@/components/Fallback";
 
 /**
  * Catches anything thrown while rendering a route. The message is shown only
- * behind a disclosure — the headline stays in plain language.
+ * behind a disclosure; the headline stays in plain language.
  */
 export default function AppError({
   error,
@@ -28,7 +28,7 @@ export default function AppError({
       body={
         offline
           ? "Cutlist runs on your own machine, so this is usually the dev server having stopped rather than the internet. Check the terminal you started it in, then try again."
-          : "The page hit an error on the way in. Nothing you had saved is affected — projects, notes and the cut list are written to disk as you go."
+          : "The page hit an error on the way in. Nothing you had saved is affected. Projects, notes and the cut list are written to disk as you go."
       }
       actions={
         <>

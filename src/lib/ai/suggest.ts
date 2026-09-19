@@ -23,20 +23,20 @@ Output a JSON object exactly in this shape:
   "items": [
     {
       "title": "short imperative, max 70 chars",
-      "rationale": "why — reference the brief or a specific note",
+      "rationale": "why, referencing the brief or a specific note",
       "type": "one of the allowed types",
       "start_ms": 0,
       "priority": "low|normal|high",
       "effort": "quick|medium|involved"
     }
   ],
-  "risks": ["things likely to go wrong or get flagged — copyright, pacing, platform limits"],
+  "risks": ["things likely to go wrong or get flagged: copyright, pacing, platform limits"],
   "gaps": ["questions the editor should ask the creator before starting"]
 }
 
 Allowed "type" values: ${LABEL_TYPES.join(", ")}
 
-Give between 3 and 8 items. Omit start_ms when no specific moment applies. Be concrete and short — an editor reads this on a phone before opening the timeline.`;
+Give between 3 and 8 items. Omit start_ms when no specific moment applies. Be concrete and short; an editor reads this on a phone before opening the timeline. Never use em dashes.`;
 
 export async function suggestForProject(
   workspaceId: string,
@@ -220,7 +220,7 @@ export function heuristicSuggestions(input: SuggestInput): SuggestionPayload {
   if (/fast|snappy|punchy|high energy/i.test(pacing)) {
     items.push({
       title: "Add punch-ins on the strongest lines",
-      rationale: `The brief asks for ${pacing.toLowerCase()} pacing — a subtle zoom on emphasis lines carries energy without new footage.`,
+      rationale: `The brief asks for ${pacing.toLowerCase()} pacing, so a subtle zoom on emphasis lines carries energy without new footage.`,
       type: "zoom",
       priority: "low",
       effort: "quick",
@@ -234,7 +234,7 @@ export function heuristicSuggestions(input: SuggestInput): SuggestionPayload {
     );
   if (counts.get("music"))
     risks.push(
-      "Music was requested — check licensing for the target platform before delivery.",
+      "Music was requested. Check licensing for the target platform before delivery.",
     );
   if (totalDuration > 45 * 60 * 1000)
     risks.push(
@@ -242,7 +242,7 @@ export function heuristicSuggestions(input: SuggestInput): SuggestionPayload {
     );
 
   if (!input.brief || Object.keys(brief).length === 0)
-    gaps.push("The creator brief has not been filled in — aspect ratio, platform and deadline are unknown.");
+    gaps.push("The creator brief has not been filled in, so aspect ratio, platform and deadline are unknown.");
   if (!brief.aspect) gaps.push("What aspect ratio should the master be delivered in?");
   if (!brief.deadline && !brief.due) gaps.push("When is this due?");
   if (input.videos.length === 0) gaps.push("No footage has been attached to the project yet.");
@@ -254,7 +254,7 @@ export function heuristicSuggestions(input: SuggestInput): SuggestionPayload {
   return {
     headline,
     read:
-      "Offline read — no language-model key is connected to this workspace, so this is a rules-based pass over the brief and cut list. Add a key in Settings → AI providers for a real edit plan.",
+      "Offline read: no language-model key is connected to this workspace, so this is a rules-based pass over the brief and cut list. Add a key in Settings → AI providers for a real edit plan.",
     items: items.slice(0, 6),
     risks,
     gaps,

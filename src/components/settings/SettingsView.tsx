@@ -514,7 +514,7 @@ function DriveSettings({
         </h2>
         <p className="text-[12.5px] text-mute mt-1.5 max-w-[62ch] leading-relaxed">
           Attach footage straight from Drive. Clips stream through this server
-          using the connected account's token — nothing is copied onto disk.
+          using the connected account's token. Cutlist also keeps a working copy of any clip you attach, so it can measure it and so scrubbing is instant; that copy can be released from the Footage tab.
         </p>
       </div>
       <div className="rule-x" />
@@ -624,7 +624,7 @@ function People({
       setCopied(text);
       setTimeout(() => setCopied(null), 2000);
     } catch {
-      toast("Copy failed — select the link and copy it manually.", "error");
+      toast("Copy failed. Select the link and copy it manually.", "error");
     }
   }
 
@@ -730,7 +730,7 @@ function People({
               Pending invites
             </h2>
             <p className="text-[12.5px] text-mute mt-1">
-              There is no mail server here — send the link yourself.
+              There is no mail server here. Send the link yourself.
             </p>
           </div>
           <div className="rule-x" />
@@ -773,7 +773,7 @@ function People({
         open={inviteOpen}
         onClose={() => setInviteOpen(false)}
         title="Invite someone"
-        description="You get a link back — send it however you like. It works once."
+        description="You get a link back. Send it however you like. It works once."
         width={460}
       >
         <form onSubmit={invite} className="space-y-4">

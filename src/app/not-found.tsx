@@ -8,7 +8,7 @@ export default function NotFound() {
       body={
         <>
           The page, project or clip you followed either moved, was deleted, or
-          belongs to a workspace you are not a member of — Cutlist treats those
+          belongs to a workspace you are not a member of. Cutlist treats those
           the same on purpose, so a stray link never confirms what exists
           elsewhere.
         </>

@@ -13,7 +13,7 @@ export const dynamic = "force-dynamic";
 /**
  * Serves footage to the player.
  *
- * Access is decided by `getVideo`, which pins the workspace — a video id from
+ * Access is decided by `getVideo`, which pins the workspace, so a video id from
  * another tenant 404s before a single byte is read. Range requests are honoured
  * so the browser can seek without downloading the whole file.
  */
@@ -22,7 +22,12 @@ export const GET = route(async (req, { params }: Params) => {
   const { videoId } = await params;
   const video = getVideo(ctx, videoId);
 
-  if (video.source === "drive" && video.drive_file_id) {
+  // A local copy always wins: it seeks instantly, costs no Drive egress, and
+  // it is the file the analyser measured. The preview copy wins over the
+  // original, because an HEVC original will not decode in a browser at all.
+  const localKey = video.proxy_key ?? video.storage_key;
+
+  if (!localKey && video.source === "drive" && video.drive_file_id) {
     const upstream = await streamFile(
       ctx.workspace.id,
       video.drive_file_id,
@@ -42,13 +47,13 @@ export const GET = route(async (req, { params }: Params) => {
     return new Response(upstream.body, { status: upstream.status, headers });
   }
 
-  if (video.source === "link" && video.external_url) {
+  if (!localKey && video.source === "link" && video.external_url) {
     return Response.redirect(video.external_url, 302);
   }
 
-  if (!video.storage_key) throw new HttpError(404, "This clip has no file.");
+  if (!localKey) throw new HttpError(404, "This clip has no file.");
 
-  const path = resolveKey(video.storage_key);
+  const path = resolveKey(localKey);
   let stat: fs.Stats;
   try {
     stat = fs.statSync(path);
@@ -58,7 +63,7 @@ export const GET = route(async (req, { params }: Params) => {
 
   const range = req.headers.get("range");
   const headers = new Headers({
-    "Content-Type": video.mime || "video/mp4",
+    "Content-Type": video.proxy_key ? "video/mp4" : video.mime || "video/mp4",
     "Accept-Ranges": "bytes",
     "Cache-Control": "private, max-age=0, must-revalidate",
   });

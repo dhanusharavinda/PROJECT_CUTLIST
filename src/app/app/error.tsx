@@ -28,7 +28,7 @@ export default function WorkspaceError({
         </h1>
         <p className="text-[13.5px] text-mute mt-3 leading-[1.65] max-w-[54ch]">
           Something failed while building this view. Your projects, notes and
-          cut list are stored on disk and are not affected — everything else in
+          cut list are stored on disk and are not affected. Everything else in
           the sidebar still works.
         </p>
 

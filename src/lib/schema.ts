@@ -233,4 +233,147 @@ export const MIGRATIONS: { id: string; sql: string }[] = [
       CREATE INDEX idx_activity_ws ON activity(workspace_id, created_at DESC);
     `,
   },
+  {
+    id: "0002_analysis",
+    sql: /* sql */ `
+      -- A clip can be footage to cut, or a reel you want to imitate.
+      ALTER TABLE videos ADD COLUMN role TEXT NOT NULL DEFAULT 'footage';
+
+      -- What the project is: gym edit, aesthetic reel, surreal, mini vlog.
+      ALTER TABLE projects ADD COLUMN niche TEXT NOT NULL DEFAULT 'general';
+      ALTER TABLE projects ADD COLUMN reference_video_id TEXT;
+
+      -- Whether an instruction came from a voice note or from footage analysis.
+      ALTER TABLE labels ADD COLUMN source TEXT NOT NULL DEFAULT 'note';
+
+      -- What ffmpeg measured about one clip. \`payload\` carries the shot list,
+      -- beat grid, silences and energy curve as JSON.
+      CREATE TABLE analyses (
+        id            TEXT PRIMARY KEY,
+        workspace_id  TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+        project_id    TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+        video_id      TEXT NOT NULL REFERENCES videos(id) ON DELETE CASCADE,
+        status        TEXT NOT NULL DEFAULT 'queued'
+                        CHECK (status IN ('queued','running','done','failed')),
+        error         TEXT,
+        engine        TEXT NOT NULL DEFAULT '',
+        width         INTEGER NOT NULL DEFAULT 0,
+        height        INTEGER NOT NULL DEFAULT 0,
+        fps           REAL NOT NULL DEFAULT 0,
+        duration_ms   INTEGER NOT NULL DEFAULT 0,
+        has_audio     INTEGER NOT NULL DEFAULT 0,
+        bpm           REAL NOT NULL DEFAULT 0,
+        scene_count   INTEGER NOT NULL DEFAULT 0,
+        payload       TEXT NOT NULL DEFAULT '{}',
+        created_at    INTEGER NOT NULL,
+        updated_at    INTEGER NOT NULL,
+        UNIQUE (video_id)
+      );
+      CREATE INDEX idx_analyses_project ON analyses(project_id, updated_at DESC);
+
+      -- Thumbnails sampled one per shot: the filmstrip, and what a model sees.
+      CREATE TABLE analysis_frames (
+        id            TEXT PRIMARY KEY,
+        workspace_id  TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+        video_id      TEXT NOT NULL REFERENCES videos(id) ON DELETE CASCADE,
+        idx           INTEGER NOT NULL,
+        at_ms         INTEGER NOT NULL,
+        storage_key   TEXT NOT NULL,
+        shot_idx      INTEGER NOT NULL DEFAULT 0
+      );
+      CREATE INDEX idx_frames_video ON analysis_frames(video_id, idx);
+
+      -- Searchable tags for the clip library. 'local' is measured, 'ai' is read.
+      CREATE TABLE clip_tags (
+        id            TEXT PRIMARY KEY,
+        workspace_id  TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+        video_id      TEXT NOT NULL REFERENCES videos(id) ON DELETE CASCADE,
+        tag           TEXT NOT NULL,
+        kind          TEXT NOT NULL DEFAULT 'local' CHECK (kind IN ('local','ai')),
+        confidence    REAL NOT NULL DEFAULT 1,
+        created_at    INTEGER NOT NULL,
+        UNIQUE (video_id, tag)
+      );
+      CREATE INDEX idx_clip_tags_ws ON clip_tags(workspace_id, tag);
+
+      -- The suggested edit for one clip. Suggestions only; nothing here is an
+      -- instruction until the creator accepts it into the cut list.
+      CREATE TABLE edit_plans (
+        id            TEXT PRIMARY KEY,
+        workspace_id  TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+        project_id    TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+        video_id      TEXT NOT NULL REFERENCES videos(id) ON DELETE CASCADE,
+        niche         TEXT NOT NULL DEFAULT 'general',
+        origin        TEXT NOT NULL DEFAULT 'local' CHECK (origin IN ('local','ai')),
+        model         TEXT NOT NULL DEFAULT '',
+        payload       TEXT NOT NULL,
+        created_by    TEXT REFERENCES users(id) ON DELETE SET NULL,
+        created_at    INTEGER NOT NULL
+      );
+      CREATE INDEX idx_plans_video ON edit_plans(video_id, created_at DESC);
+    `,
+  },
+  {
+    id: "0003_drive_identity",
+    sql: /* sql */ `
+      -- Drive is the home of the footage. These columns keep a clip in Cutlist
+      -- pinned to the exact file in the creator's Drive folder, so the name the
+      -- editor searches for is the name Google shows them.
+      ALTER TABLE videos ADD COLUMN source_name TEXT NOT NULL DEFAULT '';
+      ALTER TABLE videos ADD COLUMN share_url TEXT;
+      ALTER TABLE videos ADD COLUMN drive_parent_id TEXT;
+
+      -- Measured from the file once it is on disk.
+      ALTER TABLE videos ADD COLUMN codec TEXT NOT NULL DEFAULT '';
+      ALTER TABLE videos ADD COLUMN fps REAL NOT NULL DEFAULT 0;
+
+      -- The app's own working copy: none | copying | ready | failed. It is a
+      -- derived cache, never the only copy of anything.
+      ALTER TABLE videos ADD COLUMN local_state TEXT NOT NULL DEFAULT 'none';
+      ALTER TABLE videos ADD COLUMN local_error TEXT;
+
+      -- A browser-playable H.264 copy, made only when the original will not
+      -- decode (an iPhone HEVC file, say).
+      ALTER TABLE videos ADD COLUMN proxy_key TEXT;
+
+      -- The one Drive folder the editor is pointed at, the track the reel is
+      -- cut to, and the handoff version.
+      ALTER TABLE projects ADD COLUMN footage_url TEXT;
+      ALTER TABLE projects ADD COLUMN music_note TEXT NOT NULL DEFAULT '';
+      ALTER TABLE projects ADD COLUMN packet_rev INTEGER NOT NULL DEFAULT 0;
+
+      -- Anything already on disk is already local.
+      UPDATE videos SET local_state = 'ready' WHERE storage_key IS NOT NULL;
+    `,
+  },
+  {
+    id: "0004_reel",
+    sql: /* sql */ `
+      -- The reel: one row per slot, in \`idx\` order. A slot is a span of one
+      -- clip, so the same clip can appear more than once.
+      --
+      -- \`video_id\` deliberately has no foreign key. PRAGMA foreign_keys is ON,
+      -- so a reference with ON DELETE CASCADE would silently shrink the reel the
+      -- moment a clip was deleted and the creator would never learn which slot
+      -- went. A dangling id instead leaves a visible "this clip is gone" slot
+      -- that has to be resolved by hand.
+      --
+      -- No UNIQUE (project_id, idx) either: the reel is rewritten whole, so a
+      -- unique index would hold during a reorder only by accident.
+      CREATE TABLE reel_slots (
+        id            TEXT PRIMARY KEY,
+        workspace_id  TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+        project_id    TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+        video_id      TEXT NOT NULL,
+        idx           INTEGER NOT NULL,
+        in_ms         INTEGER NOT NULL DEFAULT 0,
+        out_ms        INTEGER NOT NULL,
+        note          TEXT NOT NULL DEFAULT '',
+        snap          TEXT NOT NULL DEFAULT 'manual',
+        created_at    INTEGER NOT NULL,
+        updated_at    INTEGER NOT NULL
+      );
+      CREATE INDEX idx_reel_slots ON reel_slots(project_id, idx);
+    `,
+  },
 ];

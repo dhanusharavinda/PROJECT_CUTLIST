@@ -34,6 +34,15 @@ export interface Project {
   name: string;
   summary: string;
   status: ProjectStatus;
+  /** Which preset the edit plans use: gym, aesthetic, surreal, vlog, general. */
+  niche: string;
+  reference_video_id: string | null;
+  /** The Drive folder the editor is sent to. */
+  footage_url: string | null;
+  /** The track this reel is cut to, in the creator's words. */
+  music_note: string;
+  /** Bumped on every reel change, and printed in the handoff filename. */
+  packet_rev: number;
   due_at: number | null;
   created_by: string;
   created_at: number;
@@ -46,6 +55,20 @@ export interface Video {
   project_id: string;
   title: string;
   source: "upload" | "drive" | "link";
+  /** "reference" clips are reels to imitate, not footage to cut. */
+  role: "footage" | "reference";
+  /** The filename in Drive, with its extension: what the editor searches for. */
+  source_name: string;
+  /** Google's own link to the file, so the handoff can point at it. */
+  share_url: string | null;
+  drive_parent_id: string | null;
+  codec: string;
+  fps: number;
+  /** The app's working copy on disk. A derived cache, never the only copy. */
+  local_state: "none" | "copying" | "ready" | "failed";
+  local_error: string | null;
+  /** A browser-playable copy, present only when the original will not decode. */
+  proxy_key: string | null;
   storage_key: string | null;
   external_url: string | null;
   drive_file_id: string | null;
@@ -128,6 +151,8 @@ export interface Label {
   status: "open" | "doing" | "done" | "skipped";
   confidence: number;
   origin: "ai" | "manual" | "heuristic";
+  /** A voice note, or the footage analysis. */
+  source: "note" | "analysis";
   assignee_id: string | null;
   created_at: number;
   updated_at: number;

@@ -1,3 +1,4 @@
+import { noEmDashDeep } from "@/lib/format";
 import { json, route } from "@/lib/api";
 import { id, now, run } from "@/lib/db";
 import { assert, can, getProject, requireCtx } from "@/lib/tenancy";
@@ -14,7 +15,7 @@ export const maxDuration = 300;
 
 /**
  * The second-pair-of-eyes pass. Reads the brief, every transcript and the whole
- * cut list at once — the one place where the AI sees the project as a whole
+ * cut list at once: the one place where the AI sees the project as a whole
  * rather than a single note.
  */
 export const POST = route(async (_req, { params }: Params) => {
@@ -25,7 +26,7 @@ export const POST = route(async (_req, { params }: Params) => {
 
   const context = loadAiContext(ctx, projectId);
 
-  const { payload, model } = await suggestForProject(ctx.workspace.id, {
+  const { payload: raw, model } = await suggestForProject(ctx.workspace.id, {
     projectName: project.name,
     brief: Object.keys(context.brief.payload).length
       ? briefForPrompt(context.brief.payload)
@@ -43,6 +44,8 @@ export const POST = route(async (_req, { params }: Params) => {
       status: l.status,
     })),
   });
+
+  const payload = noEmDashDeep(raw);
 
   const suggestionId = id("sug");
   run(

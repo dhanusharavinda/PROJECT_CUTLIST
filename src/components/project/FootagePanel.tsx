@@ -17,6 +17,7 @@ import { FilmstripArt } from "@/components/EmptyArt";
 import { bytes, timecode } from "@/lib/format";
 import type { Video } from "@/lib/types";
 import { api } from "./useProject";
+import { DrivePicker } from "./DrivePicker";
 
 interface DriveFile {
   id: string;
@@ -45,6 +46,12 @@ export function FootagePanel({
   );
   const [linkOpen, setLinkOpen] = useState(false);
   const [driveOpen, setDriveOpen] = useState(false);
+
+  // Working copies are a cache, so it should be visible and releasable.
+  const onDisk = videos.reduce(
+    (total, clip) => total + (clip.storage_key ? clip.size_bytes : 0),
+    0,
+  );
 
   /** Read duration client-side so the timeline is correct before first play. */
   async function readDuration(file: File): Promise<number> {
@@ -170,6 +177,12 @@ export function FootagePanel({
         </div>
       ) : null}
 
+      {onDisk > 0 ? (
+        <p className="text-[11px] text-faint mb-3 tabular">
+          {bytes(onDisk)} of working copies on this machine for this project.
+        </p>
+      ) : null}
+
       {videos.length === 0 ? (
         <div className="glass rounded-[15px]">
           <Empty
@@ -193,6 +206,17 @@ export function FootagePanel({
                 href={`/app/projects/${projectId}/walkthrough/${video.id}`}
                 className="block aspect-video relative bg-gradient-to-br from-ink-800 to-ink-950"
               >
+                {/* The first analysis frame, once there is one. */}
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={`/api/videos/${video.id}/frames/0`}
+                  alt=""
+                  loading="lazy"
+                  className="absolute inset-0 size-full object-cover opacity-80 group-hover:opacity-100 transition-opacity"
+                  onError={(e) => {
+                    e.currentTarget.style.display = "none";
+                  }}
+                />
                 <span className="absolute inset-0 grid place-items-center">
                   <span className="size-10 rounded-full glass-deep grid place-items-center text-chalk group-hover:bg-signal group-hover:text-ink-950 transition-colors">
                     <Play size={15} className="ml-0.5" fill="currentColor" />
@@ -211,9 +235,15 @@ export function FootagePanel({
               <div className="px-3.5 py-3 flex items-start gap-2">
                 <div className="min-w-0 flex-1">
                   <p className="text-[13px] text-chalk truncate">{video.title}</p>
-                  <p className="text-[11px] text-faint mt-0.5 tabular">
-                    {video.size_bytes ? bytes(video.size_bytes) : video.mime}
+                  <p className="text-[11px] text-faint mt-0.5 tabular truncate">
+                    {video.source_name || video.mime}
+                    {video.size_bytes ? ` · ${bytes(video.size_bytes)}` : ""}
                   </p>
+                  <LocalState
+                    video={video}
+                    canUpload={canUpload}
+                    onChanged={onChanged}
+                  />
                 </div>
                 {canUpload ? (
                   <button
@@ -236,7 +266,7 @@ export function FootagePanel({
         projectId={projectId}
         onAdded={onChanged}
       />
-      <DriveModal
+      <DrivePicker
         open={driveOpen}
         onClose={() => setDriveOpen(false)}
         projectId={projectId}
@@ -286,7 +316,7 @@ function LinkModal({
       open={open}
       onClose={onClose}
       title="Add a clip by URL"
-      description="A direct link to a video file. The browser plays it in place — the source must allow cross-origin playback."
+      description="A direct link to a video file. The browser plays it in place, so the source must allow cross-origin playback."
       width={470}
     >
       <form onSubmit={submit} className="space-y-4">
@@ -322,154 +352,146 @@ function LinkModal({
   );
 }
 
-function DriveModal({
-  open,
-  onClose,
-  projectId,
-  onAdded,
+/**
+ * Where a clip actually is, and what to do about it.
+ *
+ * A Drive clip with no local copy still plays, it just streams from Google and
+ * cannot be analysed. The copy is what buys thumbnails, shot detection, beats
+ * and instant scrubbing, and it can always be released again.
+ */
+function LocalState({
+  video,
+  canUpload,
+  onChanged,
 }: {
-  open: boolean;
-  onClose: () => void;
-  projectId: string;
-  onAdded: () => void;
+  video: Video;
+  canUpload: boolean;
+  onChanged: () => void;
 }) {
   const toast = useToast();
-  const [state, setState] = useState<{
-    loading: boolean;
-    connected: boolean;
-    available: boolean;
-    files: DriveFile[];
-    error?: string;
-  }>({ loading: false, connected: false, available: false, files: [] });
-  const [query, setQuery] = useState("");
-  const [importing, setImporting] = useState<string | null>(null);
+  const [progress, setProgress] = useState<{
+    stage: string;
+    copied: number;
+    total: number;
+  } | null>(null);
+  const [busy, setBusy] = useState(false);
+  const copying = video.local_state === "copying";
 
-  const load = useCallback(async (search = "") => {
-    setState((s) => ({ ...s, loading: true, error: undefined }));
-    try {
-      const data = await api<{
-        connected: boolean;
-        available: boolean;
-        files: DriveFile[];
-      }>(`/api/integrations/drive?q=${encodeURIComponent(search)}`);
-      setState({ loading: false, ...data });
-    } catch (err) {
-      setState((s) => ({ ...s, loading: false, error: (err as Error).message }));
-    }
-  }, []);
-
-  // Fetch on open, not on mount — most sessions never open this.
+  // Only the clip being copied polls, and the queue runs one at a time.
   useEffect(() => {
-    if (open) void load();
-  }, [open, load]);
+    if (!copying) {
+      setProgress(null);
+      return;
+    }
+    let live = true;
+    const tick = async () => {
+      try {
+        const data = await api<{
+          state: string;
+          progress: { stage: string; copied: number; total: number } | null;
+        }>(`/api/videos/${video.id}/localize`);
+        if (!live) return;
+        setProgress(data.progress);
+        if (data.state !== "copying") onChanged();
+      } catch {
+        /* the next tick tries again */
+      }
+    };
+    void tick();
+    const timer = setInterval(tick, 2000);
+    return () => {
+      live = false;
+      clearInterval(timer);
+    };
+  }, [copying, video.id, onChanged]);
 
-  async function importFile(file: DriveFile) {
-    setImporting(file.id);
+  async function call(method: "POST" | "DELETE", message: string) {
+    setBusy(true);
     try {
-      await api(`/api/projects/${projectId}/videos`, {
-        method: "POST",
-        json: {
-          title: file.name.replace(/\.[a-z0-9]{2,5}$/i, ""),
-          source: "drive",
-          driveFileId: file.id,
-          mime: file.mimeType,
-          sizeBytes: file.size,
-          durationMs: file.durationMs,
-        },
-      });
-      toast(`${file.name} attached`, "ok");
-      onAdded();
-      onClose();
+      await api(`/api/videos/${video.id}/localize`, { method });
+      toast(message, "ok");
+      onChanged();
     } catch (err) {
       toast((err as Error).message, "error");
     } finally {
-      setImporting(null);
+      setBusy(false);
     }
   }
 
-  return (
-    <Modal
-      open={open}
-      onClose={onClose}
-      title="Pull from Google Drive"
-      description="Clips stream straight from your Drive — nothing is copied onto this machine."
-      width={560}
-    >
-      {state.loading && state.files.length === 0 ? (
-        <div className="space-y-2">
-          {[0, 1, 2, 3].map((i) => (
-            <div key={i} className="h-12 rounded-[10px] skeleton" />
-          ))}
-        </div>
-      ) : state.error ? (
-        <p className="text-[12.5px] text-danger bg-danger/8 border border-danger/20 rounded-[10px] px-3 py-2.5">
-          {state.error}
-        </p>
-      ) : !state.available ? (
-        <Empty
-          title="Drive isn't set up on this instance"
-          hint="Add GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET to .env.local, then restart. The README has the exact steps."
-        />
-      ) : !state.connected ? (
-        <Empty
-          title="No Drive account connected"
-          hint="Connect the workspace to a Google account to browse footage from here."
-          action={
-            <Link href="/app/settings">
-              <Button variant="primary">Open settings</Button>
-            </Link>
-          }
-        />
-      ) : (
-        <div className="space-y-3">
-          <div className="relative">
-            <Search
-              size={14}
-              className="absolute left-3 top-1/2 -translate-y-1/2 text-faint pointer-events-none"
-            />
-            <input
-              className="field pl-9"
-              placeholder="Search your Drive…"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && load(query)}
-            />
-          </div>
+  if (copying) {
+    const pct =
+      progress && progress.total > 0
+        ? Math.round((progress.copied / progress.total) * 100)
+        : null;
+    const label =
+      progress?.stage === "preview"
+        ? "Making a playable preview"
+        : progress?.stage === "reading"
+          ? "Reading shots and beats"
+          : pct !== null
+            ? `Copying ${pct}%`
+            : "Copying from Drive";
+    return (
+      <p className="text-[11px] text-signal/90 mt-1 flex items-center gap-1.5">
+        <Spinner /> {label}
+      </p>
+    );
+  }
 
-          {state.files.length === 0 ? (
-            <Empty title="No video files found" hint="Try a different search." />
-          ) : (
-            <ul className="space-y-1 max-h-[46vh] overflow-y-auto -mx-1 px-1">
-              {state.files.map((file) => (
-                <li key={file.id}>
-                  <button
-                    onClick={() => importFile(file)}
-                    disabled={Boolean(importing)}
-                    className={clsx(
-                      "w-full flex items-center gap-3 rounded-[10px] px-3 py-2.5 text-left transition-colors",
-                      "hover:bg-white/[0.06] disabled:opacity-50",
-                    )}
-                  >
-                    <Clapperboard size={15} className="text-faint shrink-0" />
-                    <span className="min-w-0 flex-1">
-                      <span className="block text-[13px] text-chalk truncate">
-                        {file.name}
-                      </span>
-                      <span className="block text-[11px] text-faint tabular">
-                        {file.size ? bytes(file.size) : "—"}
-                        {file.durationMs
-                          ? ` · ${timecode(file.durationMs)}`
-                          : ""}
-                      </span>
-                    </span>
-                    {importing === file.id ? <Spinner /> : null}
-                  </button>
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
-      )}
-    </Modal>
-  );
+  if (video.local_state === "failed") {
+    return (
+      <div className="mt-1">
+        <p className="text-[11px] text-danger leading-snug">
+          {video.local_error ?? "The copy failed."}
+        </p>
+        {canUpload ? (
+          <button
+            onClick={() => call("POST", "Trying that copy again")}
+            disabled={busy}
+            className="text-[11px] text-chalk-dim hover:text-chalk underline underline-offset-2"
+          >
+            try again
+          </button>
+        ) : null}
+      </div>
+    );
+  }
+
+  if (video.storage_key) {
+    return (
+      <p className="text-[11px] text-faint mt-1 flex items-center gap-2">
+        <span className="text-ok">
+          on this machine{video.proxy_key ? ", preview made" : ""}
+        </span>
+        {canUpload && video.source === "drive" ? (
+          <button
+            onClick={() => call("DELETE", "Local copy released")}
+            disabled={busy}
+            className="hover:text-chalk underline underline-offset-2"
+          >
+            release
+          </button>
+        ) : null}
+      </p>
+    );
+  }
+
+  if (video.source === "drive") {
+    return (
+      <p className="text-[11px] text-faint mt-1 flex items-center gap-2">
+        streaming from Drive
+        {canUpload ? (
+          <button
+            onClick={() => call("POST", "Copying from Drive")}
+            disabled={busy}
+            className="text-chalk-dim hover:text-chalk underline underline-offset-2"
+          >
+            copy here
+          </button>
+        ) : null}
+      </p>
+    );
+  }
+
+  return null;
 }

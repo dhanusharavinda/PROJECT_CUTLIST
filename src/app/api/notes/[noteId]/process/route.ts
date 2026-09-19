@@ -13,7 +13,7 @@ export const maxDuration = 300;
  * Transcribe (voice notes) and label. Called right after a recording uploads,
  * and again by hand from the UI after a key is added or the text is corrected.
  *
- * `?transcribe=0` re-runs labelling only — used when the creator edits the
+ * `?transcribe=0` re-runs labelling only. Used when the creator edits the
  * transcript, where re-hitting the STT provider would be wasteful and wrong.
  */
 export const POST = route(async (req, { params }: Params) => {

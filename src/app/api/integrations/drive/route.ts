@@ -1,6 +1,12 @@
 import { json, route } from "@/lib/api";
-import { assert, can, requireCtx } from "@/lib/tenancy";
-import { disconnect, driveConfigured, getConnection, listVideos } from "@/lib/drive";
+import { assert, badRequest, can, requireCtx } from "@/lib/tenancy";
+import {
+  disconnect,
+  DriveError,
+  driveConfigured,
+  getConnection,
+  listVideos,
+} from "@/lib/drive";
 import { logActivity } from "@/lib/activity";
 
 export const dynamic = "force-dynamic";
@@ -20,18 +26,23 @@ export const GET = route(async (req) => {
   }
 
   const url = new URL(req.url);
-  const result = await listVideos(ctx.workspace.id, {
-    search: url.searchParams.get("q") || undefined,
-    pageToken: url.searchParams.get("pageToken") || undefined,
-    folderId: url.searchParams.get("folderId") || undefined,
-  });
+  try {
+    const result = await listVideos(ctx.workspace.id, {
+      search: url.searchParams.get("q") || undefined,
+      pageToken: url.searchParams.get("pageToken") || undefined,
+      folderId: url.searchParams.get("folderId") || undefined,
+    });
 
-  return json({
-    connected: true,
-    available: true,
-    accountEmail: connection.account_email,
-    ...result,
-  });
+    return json({
+      connected: true,
+      available: true,
+      accountEmail: connection.account_email,
+      ...result,
+    });
+  } catch (err) {
+    if (err instanceof DriveError) throw badRequest(err.message);
+    throw err;
+  }
 });
 
 export const DELETE = route(async () => {

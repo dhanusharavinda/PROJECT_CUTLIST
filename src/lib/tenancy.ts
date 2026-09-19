@@ -50,7 +50,7 @@ export function workspacesFor(userId: string): (Workspace & { role: Role })[] {
 
 /**
  * Resolve the caller's active workspace. A workspace id may be *requested*
- * (cookie or explicit argument) but is only honoured if a membership backs it —
+ * (cookie or explicit argument) but is only honoured if a membership backs it;
  * otherwise we silently fall back to the first workspace the user belongs to.
  */
 export async function requireCtx(requested?: string | null): Promise<Ctx> {

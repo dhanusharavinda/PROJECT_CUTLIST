@@ -295,7 +295,7 @@ export function Modal({
   useEffect(() => {
     if (!open) return;
 
-    // Send focus into the dialog, and put it back where it came from on close —
+    // Send focus into the dialog, and put it back where it came from on close;
     // otherwise a keyboard user is dropped at the top of the document.
     const returnTo = document.activeElement as HTMLElement | null;
     const focusable = () =>
@@ -308,7 +308,7 @@ export function Modal({
       ).filter((el) => el.getClientRects().length > 0);
 
     // Prefer what the form asked for, then the first real field, and only fall
-    // back to "whatever is first" — which would otherwise be the close button.
+    // back to "whatever is first", which would otherwise be the close button.
     const items = focusable();
     const target =
       items.find((el) => el.hasAttribute("autofocus")) ??

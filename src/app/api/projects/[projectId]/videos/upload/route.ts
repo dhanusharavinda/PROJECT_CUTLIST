@@ -53,8 +53,9 @@ export const POST = route(async (req, { params }: Params) => {
   run(
     `INSERT INTO videos
        (id, workspace_id, project_id, title, source, storage_key, external_url, drive_file_id,
-        mime, size_bytes, duration_ms, status, position, created_by, created_at)
-     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+        mime, size_bytes, duration_ms, status, position, created_by, created_at,
+        source_name, local_state)
+     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,'ready')`,
     videoId,
     ctx.workspace.id,
     projectId,
@@ -70,6 +71,7 @@ export const POST = route(async (req, { params }: Params) => {
     nextPosition,
     ctx.user.id,
     now(),
+    filename,
   );
 
   run(

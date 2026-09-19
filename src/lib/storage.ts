@@ -76,6 +76,40 @@ export async function removeKey(key: string) {
   await fs.promises.rm(resolveKey(key), { force: true });
 }
 
+/** Remove a whole prefix, so deleting a clip leaves no empty folders behind. */
+export async function removeTree(prefix: string) {
+  await fs.promises.rm(resolveKey(prefix), { recursive: true, force: true });
+}
+
+/**
+ * Remove files in one folder whose names start with any of these prefixes,
+ * keeping the named exceptions. Cached derivatives (packet stills) are named
+ * after what they were made from, so this is how the stale ones are swept
+ * without touching another project's cache.
+ */
+export async function removeByPrefix(
+  folder: string,
+  prefixes: string[],
+  keep: Set<string> = new Set(),
+) {
+  if (prefixes.length === 0) return;
+
+  let entries: string[];
+  try {
+    entries = await fs.promises.readdir(resolveKey(folder));
+  } catch {
+    return; // no cache folder yet
+  }
+
+  await Promise.all(
+    entries
+      .filter(
+        (name) => !keep.has(name) && prefixes.some((prefix) => name.startsWith(prefix)),
+      )
+      .map((name) => removeKey(`${folder}/${name}`).catch(() => undefined)),
+  );
+}
+
 export function statKey(key: string): fs.Stats | null {
   try {
     return fs.statSync(resolveKey(key));

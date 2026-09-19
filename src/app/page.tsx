@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import { currentUser } from "@/lib/auth";
 import { LABEL_STYLE } from "@/lib/labelStyle";
+import { HelpButton } from "@/components/HelpButton";
 
 export default async function Landing() {
   if (await currentUser()) redirect("/app");
@@ -33,7 +34,7 @@ export default async function Landing() {
           <div className="rule-x mb-6" />
           <div className="flex flex-wrap items-center justify-between gap-4 text-[12px] text-faint">
             <span>
-              Cutlist — self-hosted. Your footage and your API keys stay on your
+              Cutlist, self-hosted. Your footage and your API keys stay on your
               machine.
             </span>
             <span className="tabular">v0.1</span>
@@ -68,6 +69,12 @@ function TopBar() {
       <nav className="mx-auto max-w-6xl glass rounded-[14px] h-14 flex items-center justify-between gap-2 pl-3.5 pr-2 sm:pl-4 sm:pr-2.5">
         <Wordmark />
         <div className="flex items-center gap-1 shrink-0">
+          <span className="sm:hidden">
+            <HelpButton audience="public" compact />
+          </span>
+          <span className="hidden sm:block">
+            <HelpButton audience="public" />
+          </span>
           <Link
             href="/login"
             className="h-9 px-2.5 sm:px-3.5 inline-flex items-center rounded-[10px] text-[13.5px] whitespace-nowrap text-chalk-dim hover:text-chalk hover:bg-white/[0.055] transition-colors"
@@ -142,7 +149,7 @@ function Hero() {
             className="mt-5 text-[12.5px] text-faint animate-fade"
             style={{ animationDelay: "200ms" }}
           >
-            Runs on your own machine. Bring your own transcription and AI keys —
+            Runs on your own machine. Bring your own transcription and AI keys:
             add them in Settings, never in a config file.
           </p>
         </div>
@@ -258,7 +265,7 @@ function WalkthroughMock() {
 
             <div className="space-y-1.5">
               {[
-                { type: "cut" as const, tc: "00:24", text: "Cut the ramble — it drags" },
+                { type: "cut" as const, tc: "00:24", text: "Cut the ramble, it drags" },
                 {
                   type: "transition" as const,
                   tc: "01:28",
@@ -266,7 +273,7 @@ function WalkthroughMock() {
                 },
                 {
                   type: "caption" as const,
-                  tc: "—",
+                  tc: "All",
                   text: "Burn in captions",
                   high: true,
                 },
@@ -303,7 +310,7 @@ function Flow() {
     {
       n: "01",
       title: "Fill the brief once",
-      body: "Type of edit, platform, aspect, pacing, the things you never want done again. It stops being a conversation you repeat every project — and it is what the AI reads when it judges your notes.",
+      body: "Type of edit, platform, aspect, pacing, the things you never want done again. It stops being a conversation you repeat every project, and it is what the AI reads when it judges your notes.",
     },
     {
       n: "02",
@@ -313,7 +320,7 @@ function Flow() {
     {
       n: "03",
       title: "The editor opens a cut list",
-      body: "Not a paragraph. A timestamped, typed, prioritised list they can tick off — inside a shared room with chat, so the back-and-forth stays next to the frame it is about.",
+      body: "Not a paragraph. A timestamped, typed, prioritised list they can tick off, inside a shared room with chat, so the back-and-forth stays next to the frame it is about.",
     },
   ];
 
@@ -358,7 +365,7 @@ function NotAnEditor() {
               Cutlist is not an editor.
             </p>
             <p className="text-[13.5px] text-mute mt-4 leading-[1.65] max-w-[52ch]">
-              It never touches your media — nothing is cut, rendered,
+              It never touches your media. Nothing is cut, rendered,
               transcoded or re-encoded, and no file leaves here changed. Your
               editor still cuts in Premiere, Resolve or Final Cut. Cutlist only
               carries the handoff: what to do, where it happens, and how you
@@ -397,7 +404,7 @@ function Features() {
     {
       icon: AudioLines,
       title: "Voice notes that know where they are",
-      body: "Recording captures the playhead. Relative direction — “here”, “this bit”, “right before the cut” — resolves to a real frame instead of a guess.",
+      body: "Recording captures the playhead. Relative direction (“here”, “this bit”, “right before the cut”) resolves to a real frame instead of a guess.",
     },
     {
       icon: Sparkles,
@@ -412,7 +419,7 @@ function Features() {
     {
       icon: MessagesSquare,
       title: "Questions land on the instruction",
-      body: "Live chat scoped to the project — and the editor can ask on the punch-in at 1:41 itself. The creator sees “needs an answer” against that row until they reply.",
+      body: "Live chat scoped to the project, and the editor can ask on the punch-in at 1:41 itself. The creator sees “needs an answer” against that row until they reply.",
     },
     {
       icon: FolderSync,

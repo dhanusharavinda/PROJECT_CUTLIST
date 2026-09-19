@@ -9,22 +9,26 @@ import {
   Download,
   Film,
   ListChecks,
+  ListOrdered,
   Sparkles,
   Trash2,
+  Wand2,
 } from "lucide-react";
 import { Button, Meter, Segmented, useToast } from "@/components/ui";
 import { PROJECT_STATUS_STYLE } from "@/lib/labelStyle";
 import { shortDate } from "@/lib/format";
 import type { ProjectDetail } from "@/lib/queries";
 import type { ProjectStatus } from "@/lib/types";
+import type { NicheId } from "@/lib/analysis/types";
 import { api, useProject } from "./useProject";
 import { BriefForm } from "./BriefForm";
 import { FootagePanel } from "./FootagePanel";
 import { CutList } from "./CutList";
+import { PlanPanel } from "./PlanPanel";
 import { ReviewPanel } from "./ReviewPanel";
 import { Room } from "./Room";
 
-type Tab = "brief" | "footage" | "cutlist" | "review";
+type Tab = "brief" | "footage" | "plan" | "cutlist" | "review";
 
 export function ProjectView({ initial }: { initial: ProjectDetail }) {
   const router = useRouter();
@@ -79,7 +83,12 @@ export function ProjectView({ initial }: { initial: ProjectDetail }) {
   }
 
   return (
-    <div className="lg:grid lg:grid-cols-[minmax(0,1fr)_326px] lg:h-dvh">
+    <div
+      className={clsx(
+        "lg:h-[calc(100dvh-3rem)]",
+        state.solo ? "lg:block" : "lg:grid lg:grid-cols-[minmax(0,1fr)_326px]",
+      )}
+    >
       <div className="min-w-0 lg:overflow-y-auto">
         <header className="px-5 sm:px-8 pt-7 pb-5">
           <div className="flex flex-wrap items-start justify-between gap-4">
@@ -145,6 +154,7 @@ export function ProjectView({ initial }: { initial: ProjectDetail }) {
                         ["md", "Markdown", "for the editor's notes"],
                         ["csv", "CSV", "for a spreadsheet"],
                         ["json", "JSON", "for scripting"],
+                        ["edl", "EDL markers", "for DaVinci or Premiere"],
                       ].map(([format, label, hint]) => (
                         <a
                           key={format}
@@ -166,11 +176,16 @@ export function ProjectView({ initial }: { initial: ProjectDetail }) {
               </div>
 
               {videos.length > 0 ? (
-                <Link href={`/app/projects/${project.id}/walkthrough/${videos[0].id}`}>
-                  <Button variant="primary" icon={<Film size={14} />}>
-                    Open walkthrough
-                  </Button>
-                </Link>
+                <>
+                  <Link href={`/app/projects/${project.id}/walkthrough/${videos[0].id}`}>
+                    <Button icon={<Film size={14} />}>Walkthrough</Button>
+                  </Link>
+                  <Link href={`/app/projects/${project.id}/reel`}>
+                    <Button variant="primary" icon={<ListOrdered size={14} />}>
+                      Open reel
+                    </Button>
+                  </Link>
+                </>
               ) : null}
 
               {capabilities.canDelete ? (
@@ -217,6 +232,7 @@ export function ProjectView({ initial }: { initial: ProjectDetail }) {
               options={[
                 { value: "brief", label: <><ClipboardList size={13} /> Brief</> },
                 { value: "footage", label: <><Film size={13} /> Footage</>, count: videos.length },
+                { value: "plan", label: <><Wand2 size={13} /> Plan</> },
                 { value: "cutlist", label: <><ListChecks size={13} /> Cut list</>, count: openCount },
                 { value: "review", label: <><Sparkles size={13} /> Review</> },
               ]}
@@ -246,6 +262,21 @@ export function ProjectView({ initial }: { initial: ProjectDetail }) {
             />
           ) : null}
 
+          {tab === "plan" ? (
+            <PlanPanel
+              projectId={project.id}
+              videos={videos}
+              niche={(project.niche || "general") as NicheId}
+              referenceVideoId={project.reference_video_id}
+              aiAvailable={state.ai.llm}
+              canRun={capabilities.canRunAi}
+              onChanged={() => {
+                refresh();
+                router.refresh();
+              }}
+            />
+          ) : null}
+
           {tab === "cutlist" ? (
             <CutList
               projectId={project.id}
@@ -256,6 +287,13 @@ export function ProjectView({ initial }: { initial: ProjectDetail }) {
               messages={state.messages}
               meId={state.me.id}
               onChanged={refresh}
+              onSeek={(clipId, ms) => {
+                const clip = clipId ?? videos[0]?.id;
+                if (!clip) return;
+                router.push(
+                  `/app/projects/${project.id}/walkthrough/${clip}?t=${Math.round(ms)}`,
+                );
+              }}
             />
           ) : null}
 
@@ -271,18 +309,20 @@ export function ProjectView({ initial }: { initial: ProjectDetail }) {
         </div>
       </div>
 
-      <aside className="glass-soft lg:h-dvh lg:border-l border-white/[0.06] flex flex-col min-h-[420px]">
-        <Room
-          projectId={project.id}
-          messages={state.messages}
-          presence={presence}
-          connection={connection}
-          canChat={capabilities.canChat}
-          meId={state.me.id}
-          labelTitles={labelTitles}
-          className="flex-1"
-        />
-      </aside>
+      {state.solo ? null : (
+        <aside className="glass-soft lg:h-full lg:border-l border-white/[0.06] flex flex-col min-h-[420px]">
+          <Room
+            projectId={project.id}
+            messages={state.messages}
+            presence={presence}
+            connection={connection}
+            canChat={capabilities.canChat}
+            meId={state.me.id}
+            labelTitles={labelTitles}
+            className="flex-1"
+          />
+        </aside>
+      )}
     </div>
   );
 }

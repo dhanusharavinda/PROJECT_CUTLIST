@@ -39,7 +39,7 @@ export function parseTimecode(input: string): number | null {
 }
 
 export function bytes(n: number): string {
-  if (!n) return "—";
+  if (!n) return "-";
   const units = ["B", "KB", "MB", "GB", "TB"];
   const i = Math.min(units.length - 1, Math.floor(Math.log(n) / Math.log(1024)));
   const value = n / 1024 ** i;
@@ -97,4 +97,27 @@ export function slugify(input: string): string {
       .replace(/^-+|-+$/g, "")
       .slice(0, 40) || "workspace"
   );
+}
+
+/**
+ * House style has no em dashes. Speech-to-text and language models both like
+ * to emit them, so machine-written text is normalised before it is stored.
+ */
+export function noEmDash(text: string): string {
+  return text
+    .replace(/^[ \t]*\u2014[ \t]*/gm, "")
+    .replace(/[ \t]*\u2014[ \t]*$/gm, "")
+    .replace(/\s*\u2014\s*/g, ", ");
+}
+
+/** `noEmDash` applied to every string inside a JSON-shaped value. */
+export function noEmDashDeep<T>(value: T): T {
+  if (typeof value === "string") return noEmDash(value) as T;
+  if (Array.isArray(value)) return value.map(noEmDashDeep) as T;
+  if (value && typeof value === "object") {
+    return Object.fromEntries(
+      Object.entries(value).map(([key, inner]) => [key, noEmDashDeep(inner)]),
+    ) as T;
+  }
+  return value;
 }

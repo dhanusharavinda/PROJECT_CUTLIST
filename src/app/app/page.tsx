@@ -130,10 +130,10 @@ export default async function Dashboard() {
           <AlertTriangle size={15} className="text-warn shrink-0" />
           <span className="text-[13px] text-chalk-dim flex-1 leading-snug">
             {!stt && !llm
-              ? "No AI keys yet — voice notes will record but won't transcribe, and labelling falls back to keyword rules."
+              ? "No AI keys yet. Voice notes will record but won't transcribe, and labelling falls back to keyword rules."
               : !stt
-                ? "No transcription key — voice notes will record but won't turn into text."
-                : "No language-model key — labelling falls back to keyword rules instead of reading intent."}
+                ? "No transcription key. Voice notes will record but won't turn into text."
+                : "No language-model key. Labelling falls back to keyword rules instead of reading intent."}
           </span>
           <span className="text-[12.5px] text-signal flex items-center gap-1 shrink-0">
             Add keys
@@ -158,7 +158,7 @@ export default async function Dashboard() {
               <Empty
                 art={<FilmstripArt />}
                 title="Nothing here yet"
-                hint="A project holds one video — or a batch of them — with its brief, footage, notes and cut list."
+                hint="A project holds one video (or a batch of them) with its brief, footage, notes and cut list."
                 action={
                   can.createProject(ctx.role) ? (
                     <NewProjectButton variant="ghost" label="Start the first one" />
