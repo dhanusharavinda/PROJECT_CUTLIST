@@ -8,7 +8,7 @@ import type { Video } from "../types";
 import { startAnalysis } from "../analysis/analyze";
 import { ffError, ffmpegPath, ffprobePath, runFf } from "../analysis/ffmpeg";
 import { probe } from "../analysis/probe";
-import { getFile, streamFile } from "../drive";
+import { providerFor } from "./provider";
 
 /**
  * Drive owns the footage. This module makes the app's own working copy.
@@ -168,35 +168,19 @@ async function localizeOne(ctx: Ctx, videoId: string): Promise<void> {
 
   // ── The copy ──────────────────────────────────────────────────────────────
   if (!video.storage_key) {
-    if (video.source !== "drive" || !video.drive_file_id) {
-      throw new Error("Only a Drive clip can be copied locally.");
+    // The provider that holds the original brings it here. Drive today; a
+    // Dropbox or S3 provider would slot in without this file changing.
+    const provider = providerFor(video);
+    if (!provider.fetchToLocal) {
+      throw new Error(`${provider.label} clips cannot be copied locally.`);
     }
 
-    // Ask Google how big it is before starting, because writeStream deletes a
-    // partial file when it trips the cap and the copy would be wasted.
-    const meta = await getFile(ctx.workspace.id, video.drive_file_id);
-    const cap = importMaxBytes();
-    if (meta.size > cap) {
-      throw new Error(
-        `That clip is ${Math.round(meta.size / 1024 / 1024)} MB and the limit is ${Math.round(cap / 1024 / 1024)} MB. Raise IMPORT_MAX_MB in .env.local to bring it in.`,
-      );
-    }
-
-    setStage(videoId, "copying", 0, meta.size);
-
-    const upstream = await streamFile(ctx.workspace.id, video.drive_file_id);
-    if (!upstream.body) throw new Error("Drive returned no data for that clip.");
-
-    const key = buildKey(
-      ctx.workspace.id,
-      "video",
-      meta.name || `${video.title}.mp4`,
-    );
-    const written = await writeStream(
-      key,
-      counted(upstream.body, (copied) => setStage(videoId, "copying", copied, meta.size)),
-      cap,
-    );
+    setStage(videoId, "copying", 0, video.size_bytes);
+    const fetched = await provider.fetchToLocal(ctx, video, {
+      maxBytes: importMaxBytes(),
+      onBytes: (copied, total) => setStage(videoId, "copying", copied, total),
+    });
+    const key = fetched.key;
 
     run(
       `UPDATE videos
@@ -204,8 +188,8 @@ async function localizeOne(ctx: Ctx, videoId: string): Promise<void> {
               source_name = CASE WHEN source_name = '' THEN ? ELSE source_name END
         WHERE id = ? AND workspace_id = ?`,
       key,
-      written,
-      meta.name ?? "",
+      fetched.size,
+      fetched.name,
       videoId,
       ctx.workspace.id,
     );

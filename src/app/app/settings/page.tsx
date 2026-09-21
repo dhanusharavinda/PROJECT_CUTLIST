@@ -35,6 +35,22 @@ export default async function SettingsPage({
 
   const ffmpeg = ffmpegStatus();
 
+  // Cost control starts with seeing the calls: every model call is logged,
+  // so the last 30 days can be summed by tier and task without a meter.
+  const since = Date.now() - 30 * 24 * 3600 * 1000;
+  const usage = privileged
+    ? many<{ tier: string; task: string; calls: number; failed: number; chars: number; ms: number }>(
+        `SELECT tier, task, COUNT(*) AS calls,
+                SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END) AS failed,
+                SUM(LENGTH(input) + LENGTH(output)) AS chars,
+                SUM(duration_ms) AS ms
+           FROM ai_runs WHERE workspace_id = ? AND created_at > ?
+          GROUP BY tier, task ORDER BY calls DESC`,
+        ctx.workspace.id,
+        since,
+      )
+    : [];
+
   return (
     <>
       <SettingsView
@@ -45,6 +61,7 @@ export default async function SettingsPage({
       settings={privileged ? allSettings(ctx.workspace.id) : {}}
       sttProviders={STT_PROVIDERS.map((p) => ({ ...p }))}
       llmProviders={LLM_PROVIDERS.map((p) => ({ ...p }))}
+      usage={usage}
       active={{
         stt: stt ? { provider: stt.provider.id, label: stt.provider.label, model: stt.model } : null,
         llm: llm ? { provider: llm.provider.id, label: llm.provider.label, model: llm.model } : null,

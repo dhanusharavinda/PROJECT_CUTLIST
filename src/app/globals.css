@@ -459,3 +459,27 @@ input[type="range"].scrub::-moz-range-thumb {
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
+
+/* Touch. A fingertip is not a cursor: on a coarse pointer every control gets
+   a floor under its height so the small text buttons (Why, Skip, Mark as
+   done) and the checkboxes are hittable without changing the desktop look. */
+@media (pointer: coarse) {
+  button,
+  [role="button"],
+  select,
+  summary {
+    min-height: 34px;
+  }
+  input[type="checkbox"],
+  input[type="radio"] {
+    width: 18px;
+    height: 18px;
+  }
+  a.tabular,
+  .field {
+    min-height: 40px;
+  }
+  input[type="range"] {
+    min-height: 28px;
+  }
+}

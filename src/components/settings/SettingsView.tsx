@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import clsx from "clsx";
 import {
+  Activity,
   AudioLines,
   BrainCircuit,
   Check,
@@ -28,6 +29,91 @@ import {
 import { relativeTime } from "@/lib/format";
 import type { Member, Role } from "@/lib/types";
 import { api } from "@/components/project/useProject";
+
+/** One row of the last 30 days of model calls, by tier and task. */
+export interface UsageRow {
+  tier: string;
+  task: string;
+  calls: number;
+  failed: number;
+  chars: number;
+  ms: number;
+}
+
+const TIER_NOTE: Record<string, string> = {
+  fast: "cheap: labelling, explaining, scoping, reading frames",
+  standard: "the director",
+  deep: "revisions and the full review",
+};
+
+function AiUsage({ usage }: { usage: UsageRow[] }) {
+  const calls = usage.reduce((a, r) => a + r.calls, 0);
+  const failed = usage.reduce((a, r) => a + r.failed, 0);
+  // Roughly four characters to a token across English prose and JSON.
+  const tokens = Math.round(usage.reduce((a, r) => a + r.chars, 0) / 4);
+  const byTier = new Map<string, { calls: number; tokens: number }>();
+  for (const row of usage) {
+    const entry = byTier.get(row.tier) ?? { calls: 0, tokens: 0 };
+    entry.calls += row.calls;
+    entry.tokens += Math.round(row.chars / 4);
+    byTier.set(row.tier, entry);
+  }
+  const tiers = ["fast", "standard", "deep"].filter((t) => byTier.has(t));
+
+  return (
+    <section className="glass rounded-[15px] overflow-hidden">
+      <div className="px-5 pt-4 pb-3.5">
+        <h2 className="text-[14.5px] font-semibold text-chalk flex items-center gap-2">
+          <span className="text-signal"><Activity size={15} /></span>
+          AI usage, last 30 days
+        </h2>
+        <p className="text-[12.5px] text-mute mt-1.5 max-w-[62ch] leading-relaxed">
+          Every model call is logged with its prompt and answer. Token counts here are
+          estimated from text length (about four characters each); your provider&apos;s
+          dashboard has the bill.
+        </p>
+      </div>
+      <div className="rule-x" />
+      <div className="p-5">
+        {calls === 0 ? (
+          <p className="text-[12.5px] text-faint">No model calls yet.</p>
+        ) : (
+          <div className="space-y-4">
+            <div className="grid grid-cols-3 gap-2">
+              <div className="glass-soft rounded-[12px] px-3 py-2.5">
+                <p className="text-[10.5px] text-faint uppercase tracking-wide">Calls</p>
+                <p className="text-[16px] text-chalk tabular">{calls}</p>
+              </div>
+              <div className="glass-soft rounded-[12px] px-3 py-2.5">
+                <p className="text-[10.5px] text-faint uppercase tracking-wide">Tokens (est.)</p>
+                <p className="text-[16px] text-chalk tabular">{tokens >= 1000 ? `${(tokens / 1000).toFixed(1)}k` : tokens}</p>
+              </div>
+              <div className="glass-soft rounded-[12px] px-3 py-2.5">
+                <p className="text-[10.5px] text-faint uppercase tracking-wide">Failed</p>
+                <p className={clsx("text-[16px] tabular", failed ? "text-warn" : "text-chalk")}>{failed}</p>
+              </div>
+            </div>
+            <ul className="space-y-1.5">
+              {tiers.map((tier) => {
+                const entry = byTier.get(tier)!;
+                const tasks = usage.filter((r) => r.tier === tier).map((r) => `${r.task} ${r.calls}`).join(", ");
+                return (
+                  <li key={tier} className="text-[12.5px] flex flex-col sm:flex-row sm:items-baseline gap-x-3">
+                    <span className="text-chalk capitalize w-20 shrink-0">{tier} tier</span>
+                    <span className="text-mute tabular">
+                      {entry.calls} calls, about {entry.tokens >= 1000 ? `${(entry.tokens / 1000).toFixed(1)}k` : entry.tokens} tokens
+                    </span>
+                    <span className="text-faint text-[11.5px]">{tasks}{TIER_NOTE[tier] ? ` (${TIER_NOTE[tier]})` : ""}</span>
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
+        )}
+      </div>
+    </section>
+  );
+}
 
 interface ProviderMeta {
   id: string;
@@ -56,6 +142,7 @@ export function SettingsView({
   settings,
   sttProviders,
   llmProviders,
+  usage,
   active,
   drive,
   members,
@@ -69,6 +156,7 @@ export function SettingsView({
   settings: Record<string, string>;
   sttProviders: ProviderMeta[];
   llmProviders: ProviderMeta[];
+  usage: UsageRow[];
   active: {
     stt: { provider: string; label: string; model: string } | null;
     llm: { provider: string; label: string; model: string } | null;
@@ -127,6 +215,7 @@ export function SettingsView({
             settings={settings}
             sttProviders={sttProviders}
             llmProviders={llmProviders}
+            usage={usage}
             active={active}
           />
         ) : null}
@@ -146,12 +235,14 @@ function AiSettings({
   settings,
   sttProviders,
   llmProviders,
+  usage,
   active,
 }: {
   secrets: SecretHint[];
   settings: Record<string, string>;
   sttProviders: ProviderMeta[];
   llmProviders: ProviderMeta[];
+  usage: UsageRow[];
   active: {
     stt: { provider: string; label: string; model: string } | null;
     llm: { provider: string; label: string; model: string } | null;
@@ -267,6 +358,8 @@ function AiSettings({
         onRemove={removeKey}
         busy={busy}
       />
+
+      <AiUsage usage={usage} />
     </div>
   );
 }

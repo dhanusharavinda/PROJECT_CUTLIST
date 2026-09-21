@@ -105,15 +105,17 @@ export function PanelHeader({
   return (
     <div
       className={clsx(
-        "flex items-start justify-between gap-4 px-5 pt-4 pb-3.5",
+        // Stacks on a phone: a title squeezed beside two buttons truncates to
+        // nothing, and the action is what the thumb is after anyway.
+        "flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4 px-5 pt-4 pb-3.5",
         className,
       )}
     >
       <div className="min-w-0">
         {eyebrow ? <div className="text-eyebrow mb-1.5">{eyebrow}</div> : null}
-        <h2 className="text-[14px] font-semibold text-chalk truncate">{title}</h2>
+        <h2 className="text-[14px] font-semibold text-chalk sm:truncate">{title}</h2>
       </div>
-      {action ? <div className="shrink-0">{action}</div> : null}
+      {action ? <div className="sm:shrink-0 flex flex-wrap gap-2 [&>*]:max-w-full">{action}</div> : null}
     </div>
   );
 }

@@ -102,22 +102,6 @@ export function AgentAccess({ projectId, canManage }: { projectId: string; canMa
       <PanelHeader
         eyebrow="Outside AI, read only"
         title="Let an agent read this project"
-        action={
-          canManage ? (
-            <form onSubmit={mint} className="flex items-center gap-2">
-              <input
-                className="field !w-[150px] !py-1.5 text-[12.5px]"
-                value={name}
-                maxLength={80}
-                onChange={(e) => setName(e.target.value)}
-                aria-label="Name for the token"
-              />
-              <Button type="submit" size="sm" variant="primary" icon={<KeyRound size={13} />} loading={minting}>
-                New token
-              </Button>
-            </form>
-          ) : null
-        }
       />
 
       <div className="px-5 pb-5 space-y-5">
@@ -127,6 +111,23 @@ export function AgentAccess({ projectId, canManage }: { projectId: string; canMa
           AI suggestions. It cannot change anything here. Give each agent its own token
           and revoke it when the job is done.
         </p>
+
+        {canManage ? (
+          <form onSubmit={mint} className="flex flex-col sm:flex-row sm:items-end gap-2">
+            <Labeled label="Name the agent" className="flex-1">
+              <input
+                className="field"
+                value={name}
+                maxLength={80}
+                placeholder="ChatGPT, Astra, ..."
+                onChange={(e) => setName(e.target.value)}
+              />
+            </Labeled>
+            <Button type="submit" variant="primary" icon={<KeyRound size={14} />} loading={minting} disabled={!name.trim()}>
+              New token
+            </Button>
+          </form>
+        ) : null}
 
         {tokens === null ? (
           <p className="text-[12.5px] text-mute flex items-center gap-2">

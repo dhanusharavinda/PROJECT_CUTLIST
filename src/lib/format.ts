@@ -67,11 +67,16 @@ export function relativeTime(ts: number): string {
   return "just now";
 }
 
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+/**
+ * Deterministic on purpose: the server and the phone must print the same
+ * string or React re-renders the whole tree on hydration. A locale-aware
+ * format gave "Sep 14" on the server and "14 Sept" on a UK phone.
+ */
 export function shortDate(ts: number): string {
-  return new Date(ts).toLocaleDateString(undefined, {
-    month: "short",
-    day: "numeric",
-  });
+  const d = new Date(ts);
+  return `${d.getDate()} ${MONTHS[d.getMonth()]}`;
 }
 
 export function initials(name: string): string {
